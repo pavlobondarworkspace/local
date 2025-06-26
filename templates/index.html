@@ -132,7 +132,7 @@ function update() {
         circleObj = L.circle(center, {radius:length, color:'#2980b9', fill:false, weight:2}).addTo(map);
         // Маркеры
         if (center) {
-            if (!centerMarker) centerMarker = L.marker(center, {icon:L.icon({iconUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/images/marker-icon.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map);
+            if (!centerMarker) centerMarker = L.marker(center, {icon:L.divIcon({className:'',html:'<div style=\"background:#111;width:8px;height:8px;border-radius:4px;border:2px solid #fff;\"></div>',iconAnchor:[4,4]})}).addTo(map);
             centerMarker.setLatLng(center);
         }
         if (data.zero) {

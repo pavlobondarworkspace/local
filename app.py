@@ -46,24 +46,30 @@ def tick():
             cycle = 60.0
             t_in_cycle = (state["timer"] % cycle)
             move_time = cycle * mode
-            dt_move = min(dt, max(0, move_time - t_in_cycle)) if t_in_cycle < move_time else 0
+            if t_in_cycle < move_time:
+                dt_move = min(dt, move_time - t_in_cycle)
+            else:
+                dt_move = 0
             circle_length = 2 * math.pi * state["length"]
             if circle_length > 0 and dt_move > 0:
                 d_angle = 360.0 * (state["speed"] * dt_move) / circle_length * state["direction"]
                 state["angle"] = (state["angle"] + d_angle) % 360.0
-            state["timer"] += int(dt)
+        state["timer"] += dt
 
 def get_circle_length():
     return 2 * math.pi * state["length"] if state["length"] else 0
 
 def get_circle_time():
-    if not state["length"] or not state["speed"]:
+    if not state["length"] or not state["speed"] or not state["mode"]:
         return "00:00"
     length = get_circle_length()
     speed = state["speed"]
-    mins = length / speed / 60
-    h = int(mins // 1)
-    m = int((mins - h) * 60)
+    duty = state["mode"] / 100.0
+    if speed == 0 or duty == 0:
+        return "00:00"
+    mins = length / speed / duty
+    h = int(mins // 60)
+    m = int(mins % 60)
     return f"{h:02d}:{m:02d}"
 
 @app.route("/")
