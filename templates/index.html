@@ -129,18 +129,18 @@ function update() {
         }
         // Круг
         if (circleObj) map.removeLayer(circleObj);
-        circleObj = L.circle(center, {radius:length, color:'#2980b9', fill:false, weight:2}).addTo(map);
+        circleObj = L.circle(center, {radius:length, color:'#2980b9', fill:true, fillColor:'#4caf50', fillOpacity:0.3, weight:2}).addTo(map);
         // Маркеры
         if (center) {
-            if (!centerMarker) centerMarker = L.marker(center, {icon:L.divIcon({className:'',html:'<div style=\"background:#111;width:8px;height:8px;border-radius:4px;border:2px solid #fff;\"></div>',iconAnchor:[4,4]})}).addTo(map);
+            if (!centerMarker) centerMarker = L.marker(center, {icon:L.divIcon({className:'',html:'<div style=\"background:#111;width:6px;height:6px;border-radius:3px;\"></div>',iconAnchor:[3,3]})}).addTo(map);
             centerMarker.setLatLng(center);
         }
         if (data.zero) {
-            if (!zeroMarker) zeroMarker = L.marker(data.zero, {icon:L.divIcon({className:'',html:'<div style=\"background:#2980b9;width:8px;height:8px;border-radius:4px;border:2px solid #fff;\"></div>',iconAnchor:[4,4]})}).addTo(map);
+            if (!zeroMarker) zeroMarker = L.marker(data.zero, {icon:L.divIcon({className:'',html:'<div style=\"background:#2980b9;width:6px;height:6px;border-radius:3px;\"></div>',iconAnchor:[3,3]})}).addTo(map);
             zeroMarker.setLatLng(data.zero);
         }
         if (data.end) {
-            if (!endMarker) endMarker = L.marker(data.end, {icon:L.divIcon({className:'',html:'<div style=\"background:#e74c3c;width:8px;height:8px;border-radius:4px;border:2px solid #fff;\"></div>',iconAnchor:[4,4]})}).addTo(map);
+            if (!endMarker) endMarker = L.marker(data.end, {icon:L.divIcon({className:'',html:'<div style=\"background:#e74c3c;width:6px;height:6px;border-radius:3px;\"></div>',iconAnchor:[3,3]})}).addTo(map);
             endMarker.setLatLng(data.end);
         }
         // Линии
