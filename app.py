@@ -144,7 +144,7 @@ def index():
 
     map_html_representation = folium_map._repr_html_()
 
-    html_content_page = f"""
+    html_content_page = """
     <!DOCTYPE html>
     <html lang=\"en\">
     <head>
@@ -192,10 +192,10 @@ def index():
         <div class=\"container\">
             <h1>Center Pivot Simulator</h1>
             <div class=\"info-panel\">
-                <p id=\"status_display\">{app_data['status_message']}</p>
-                <p>Center Pivot: <span id=\"loc1_coords_display\">{'Not set' if not app_data['loc1'] else '[{:.4f}, {:.4f}]'.format(app_data['loc1'][0], app_data['loc1'][1])}</span></p>
-                <p>End Pivot: <span id=\"loc2_coords_display\">{'Not set' if not app_data['loc2'] else '[{:.4f}, {:.4f}]'.format(app_data['loc2'][0], app_data['loc2'][1])}</span></p>
-                <p>Azimuth: <span id=\"azimuth_result_display\">{('%.2f°' % app_data['azimuth']) if app_data['azimuth'] is not None else 'Not calculated'}</span></p>
+                <p id=\"status_display\">{status_message}</p>
+                <p>Center Pivot: <span id=\"loc1_coords_display\">{loc1_disp}</span></p>
+                <p>End Pivot: <span id=\"loc2_coords_display\">{loc2_disp}</span></p>
+                <p>Azimuth: <span id=\"azimuth_result_display\">{azimuth_disp}</span></p>
             </div>
             <div class=\"button-panel\">
                 <button onclick=\"enableCenterPivotSelection()\">Set Center Pivot (by map)</button>
@@ -258,7 +258,7 @@ def index():
         async function handleGlobalMapInteraction(latitude, longitude) {{
             if (!centerPivotSelectionEnabled) return;
             let targetLoc = 1;
-            let confirmQuestion = `Set Center Pivot: (${latitude}, ${longitude})?`;
+            let confirmQuestion = `Set Center Pivot: (${{latitude}}, ${{longitude}})?`;
             const confirmation = await Swal.fire({{ title: 'Confirm Point', text: confirmQuestion, icon: 'question', showCancelButton: true, confirmButtonText: 'Yes', cancelButtonText: 'Cancel' }});
             if (confirmation.isConfirmed) {{
                 await processGlobalCoordinateSelection(latitude, longitude, targetLoc);
@@ -343,7 +343,7 @@ def index():
             let names = '', vals = '';
             Object.entries(PIVOT_SPEEDS).forEach(([k,v])=>{{
                 names += `<th>${k}</th>`;
-                vals += `<td class='${Math.abs((state.pivot_speed||0)-v)<0.001?'selected':''}' data-speed='${v}'>${v}</td>`;
+                vals += `<td class='${{Math.abs((state.pivot_speed||0)-v)<0.001?'selected':''}}' data-speed='${{v}}'>${{v}}</td>`;
             }});
             document.getElementById('speed_names').innerHTML = names;
             document.getElementById('speed_values').innerHTML = vals;
@@ -405,7 +405,13 @@ def index():
         </script>
     </body>
     </html>
-    """
+    """.format(
+        status_message=app_data['status_message'],
+        loc1_disp='Not set' if not app_data['loc1'] else '[{:.4f}, {:.4f}]'.format(app_data['loc1'][0], app_data['loc1'][1]),
+        loc2_disp='Not set' if not app_data['loc2'] else '[{:.4f}, {:.4f}]'.format(app_data['loc2'][0], app_data['loc2'][1]),
+        azimuth_disp=('%.2f°' % app_data['azimuth']) if app_data['azimuth'] is not None else 'Not calculated',
+        map_html_representation=map_html_representation
+    )
     return render_template_string(html_content_page)
 
 @app.route('/set_coordinate', methods=['POST'])
