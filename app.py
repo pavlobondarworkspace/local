@@ -25,6 +25,24 @@ def calculate_azimuth(lat1, lon1, lat2, lon2):
     azimuth_deg = (math.degrees(azimuth_rad) + 360) % 360
     return azimuth_deg
 
+# --- Utility: Calculate End Pivot by angle, length, and center ---
+def calculate_end_pivot_by_angle(lat, lon, length_m, angle_deg):
+    """
+    Вычисляет координаты End Pivot по центру (lat, lon), длине (метры) и углу (градусы, от севера по часовой).
+    Возвращает (lat2, lon2).
+    """
+    R = 6371000  # радиус Земли в метрах
+    angle_rad = math.radians(angle_deg)
+    lat_rad = math.radians(lat)
+    lon_rad = math.radians(lon)
+    d_div_r = length_m / R
+    lat2_rad = math.asin(math.sin(lat_rad) * math.cos(d_div_r) + math.cos(lat_rad) * math.sin(d_div_r) * math.cos(angle_rad))
+    lon2_rad = lon_rad + math.atan2(
+        math.sin(angle_rad) * math.sin(d_div_r) * math.cos(lat_rad),
+        math.cos(d_div_r) - math.sin(lat_rad) * math.sin(lat2_rad)
+    )
+    return [math.degrees(lat2_rad), math.degrees(lon2_rad)]
+
 @app.route('/')
 def index():
     map_center = [20, 0]
@@ -32,8 +50,23 @@ def index():
 
     if app_data["loc1"]:
         folium.Marker(location=app_data["loc1"], popup="Center Pivot", icon=folium.Icon(color='blue', icon='1', prefix='fa')).add_to(folium_map)
-    if app_data["loc2"]:
-        folium.Marker(location=app_data["loc2"], popup="End Pivot", icon=folium.Icon(color='red', icon='2', prefix='fa')).add_to(folium_map)
+    # Если есть длина и Center Pivot, вычисляем End Pivot и рисуем всё
+    if app_data["loc1"] and app_data["pivot_length"]:
+        # Вычисляем End Pivot по нулевому азимуту (или по углу, если есть)
+        angle = app_data.get("pivot_angle", 0.0)
+        end_pivot = calculate_end_pivot_by_angle(app_data["loc1"][0], app_data["loc1"][1], app_data["pivot_length"], angle)
+        app_data["loc2"] = end_pivot
+        folium.Marker(location=end_pivot, popup="End Pivot", icon=folium.Icon(color='red', icon='2', prefix='fa')).add_to(folium_map)
+        folium.PolyLine([app_data["loc1"], end_pivot], color='blue', weight=4).add_to(folium_map)
+        folium.Circle(
+            location=app_data["loc1"],
+            radius=app_data["pivot_length"],
+            color='#2980b9',
+            fill=True,
+            fill_color='#f7b6d2',
+            fill_opacity=0.3,
+            weight=2
+        ).add_to(folium_map)
 
     # Relay function: defines handleGlobalMapInteraction in iframe, relays to parent handler
     relay_js = """
@@ -111,7 +144,7 @@ def index():
                     <button type="submit">Set Center Pivot (manual)</button>
                 </form>
                 <form id="pivot_length_form" style="display:inline-block; margin-left:10px;" onsubmit="return setPivotLength(event)">
-                    <input type="number" step="any" id="pivot_length_input" placeholder="Pivot Length (m)" min="1" required style="width:120px;">
+                    <input type="number" step="any" id="pivot_length_input" placeholder="Pivot Length (m)" min="1" required style="width:120px;" value="{app_data['pivot_length'] if 'pivot_length' in app_data and app_data['pivot_length'] else ''}">
                     <button type="submit">Set Pivot Length</button>
                 </form>
                 <button class="reset-button" onclick="resetGlobalSelections()">Reset All Selections</button>
