@@ -74,11 +74,8 @@ let centerMarker = null, endMarker = null, zeroMarker = null, redLine = null, bl
 let center = null, length = null;
 
 map.on('click', function(e) {
-    fetch('/set_center', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({lat: e.latlng.lat, lon: e.latlng.lng})
-    }).then(()=>update());
+    document.getElementById('lat').value = e.latlng.lat.toFixed(6);
+    document.getElementById('lon').value = e.latlng.lng.toFixed(6);
 });
 
 function setCenter() {
