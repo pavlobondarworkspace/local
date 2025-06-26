@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Center Pivot Simulator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <style>
+        body { font-family: sans-serif; background: #eef2f7; margin: 0; }
+        #map { height: 400px; margin-bottom: 1em; border-radius: 8px; }
+        .panel { background: #fff; border-radius: 8px; padding: 1em; margin: 1em auto; max-width: 700px; box-shadow: 0 2px 10px #0001; }
+        .row { display: flex; gap: 1em; align-items: center; flex-wrap: wrap; }
+        .row input, .row select { margin-right: 1em; }
+        .row label { min-width: 120px; }
+        .row button { margin-left: 0.5em; }
+        .info { margin: 0.5em 0; }
+        .warn { color: #b71c1c; background: #ffeaea; padding: 0.5em; border-radius: 4px; }
+    </style>
+</head>
+<body>
+<div class="panel">
+    <h2>Center Pivot Simulator</h2>
+    <div id="map"></div>
+    <div class="row">
+        <label>Center Pivot:</label>
+        <input id="lat" type="number" step="any" placeholder="Lat" style="width:90px;">
+        <input id="lon" type="number" step="any" placeholder="Lon" style="width:90px;">
+        <button onclick="setCenter()">Set Center</button>
+        <button onclick="resetAll()" style="background:#e74c3c;color:#fff;">Reset</button>
+    </div>
+    <div class="row">
+        <label>Pivot Length (m):</label>
+        <input id="length" type="number" min="1" step="any" style="width:120px;">
+        <button onclick="setLength()">Set Length</button>
+    </div>
+    <div class="row">
+        <label>Direction:</label>
+        <button onclick="setDir(-1)">⟲ CCW</button>
+        <button onclick="setDir(1)">⟳ CW</button>
+        <label>Speed:</label>
+        <select id="speed" onchange="setSpeed()">
+            <option value="4.886">20:1 (4.886 m/min)</option>
+            <option value="3.909">25:1 (3.909 m/min)</option>
+            <option value="3.257">30:1 (3.257 m/min)</option>
+            <option value="2.443">40:1 (2.443 m/min)</option>
+            <option value="1.954">50:1 (1.954 m/min)</option>
+            <option value="1.628">60:1 (1.628 m/min)</option>
+        </select>
+        <label>Duty:</label>
+        <input id="mode" type="range" min="0" max="100" value="100" oninput="setMode(this.value)">
+        <span id="modeval">100%</span>
+        <label>Time x:</label>
+        <select id="tf" onchange="setTF()">
+            <option>1</option><option>2</option><option>10</option><option>100</option><option>1000</option>
+        </select>
+        <button onclick="resetPivot()">Reset Pivot</button>
+    </div>
+    <div class="info" id="status"></div>
+    <div class="info" id="coords"></div>
+    <div class="info" id="azimuth"></div>
+    <div class="info" id="timer"></div>
+    <div class="warn" id="warn" style="display:none;">Set center and length to start simulation.</div>
+</div>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+let map = L.map('map').setView([20,0], 2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18}).addTo(map);
+
+let centerMarker = null, endMarker = null, zeroMarker = null, redLine = null, blueLine = null;
+let center = null, length = null;
+
+map.on('click', function(e) {
+    document.getElementById('lat').value = e.latlng.lat.toFixed(6);
+    document.getElementById('lon').value = e.latlng.lng.toFixed(6);
+});
+
+function setCenter() {
+    let lat = parseFloat(document.getElementById('lat').value);
+    let lon = parseFloat(document.getElementById('lon').value);
+    if (isNaN(lat) || isNaN(lon)) return;
+    fetch('/set_center', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat,lon})})
+        .then(()=>update());
+}
+function setLength() {
+    let length = parseFloat(document.getElementById('length').value);
+    if (isNaN(length) || length<=0) return;
+    fetch('/set_length', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({length})})
+        .then(()=>update());
+}
+function setDir(d) {
+    fetch('/control', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction:d})});
+}
+function setSpeed() {
+    let speed = parseFloat(document.getElementById('speed').value);
+    fetch('/control', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({speed})});
+}
+function setMode(val) {
+    document.getElementById('modeval').innerText = val+'%';
+    fetch('/control', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:val})});
+}
+function setTF() {
+    let tf = parseInt(document.getElementById('tf').value);
+    fetch('/control', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({time_factor:tf})});
+}
+function resetPivot() {
+    fetch('/control', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true})});
+}
+function resetAll() {
+    fetch('/reset', {method:'POST'}).then(()=>update());
+}
+
+function update() {
+    fetch('/status').then(r=>r.json()).then(data=>{
+        center = data.center;
+        length = data.length;
+        document.getElementById('warn').style.display = (!center||!length) ? '' : 'none';
+        // Markers
+        if (center) {
+            if (!centerMarker) centerMarker = L.marker(center, {icon:L.icon({iconUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/images/marker-icon.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map);
+            centerMarker.setLatLng(center);
+        }
+        if (data.zero) {
+            if (!zeroMarker) zeroMarker = L.marker(data.zero, {icon:L.divIcon({className:'',html:'<div style=\"background:#2980b9;width:16px;height:16px;border-radius:8px;border:2px solid #fff;\"></div>'})}).addTo(map);
+            zeroMarker.setLatLng(data.zero);
+        }
+        if (data.end) {
+            if (!endMarker) endMarker = L.marker(data.end, {icon:L.divIcon({className:'',html:'<div style=\"background:#e74c3c;width:16px;height:16px;border-radius:8px;border:2px solid #fff;\"></div>'})}).addTo(map);
+            endMarker.setLatLng(data.end);
+        }
+        // Lines
+        if (redLine) map.removeLayer(redLine);
+        if (blueLine) map.removeLayer(blueLine);
+        if (center && data.end) redLine = L.polyline([center, data.end], {color:'red',weight:4}).addTo(map);
+        if (center && data.zero) blueLine = L.polyline([center, data.zero], {color:'blue',weight:4}).addTo(map);
+        // Info
+        document.getElementById('coords').innerText = center ? `Center: [${center.map(x=>x.toFixed(4)).join(', ')}]` : 'Center: Not set';
+        document.getElementById('azimuth').innerText = data.azimuth!==null ? `Azimuth: ${data.azimuth.toFixed(2)}°` : 'Azimuth: Not calculated';
+        document.getElementById('timer').innerText = `Timer: ${Math.floor(data.timer/3600).toString().padStart(2,'0')}:${Math.floor((data.timer/60)%60).toString().padStart(2,'0')}`;
+        document.getElementById('status').innerText = data.running ? 'Simulation: Running' : 'Simulation: Stopped';
+        document.getElementById('mode').value = data.mode;
+        document.getElementById('modeval').innerText = data.mode+'%';
+        document.getElementById('speed').value = data.speed;
+        document.getElementById('tf').value = data.time_factor;
+        document.getElementById('length').value = data.length || '';
+    });
+}
+setInterval(update, 1000);
+update();
+</script>
+</body>
+</html> 
