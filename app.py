@@ -50,9 +50,11 @@ def tick():
                 dt_move = min(dt, move_time - t_in_cycle)
             else:
                 dt_move = 0
-            circle_length = 2 * math.pi * state["length"]
-            if circle_length > 0 and dt_move > 0:
-                d_angle = 360.0 * (state["speed"] * dt_move) / circle_length * state["direction"]
+            R = state["length"]
+            v = state["speed"]  # м/мин
+            if R > 0 and v > 0 and dt_move > 0:
+                omega = v / (60 * R)  # рад/сек
+                d_angle = math.degrees(omega * dt_move) * state["direction"]
                 state["angle"] = (state["angle"] + d_angle) % 360.0
         state["timer"] += dt
 

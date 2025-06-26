@@ -74,8 +74,11 @@ let centerMarker = null, endMarker = null, zeroMarker = null, redLine = null, bl
 let center = null, length = null;
 
 map.on('click', function(e) {
-    document.getElementById('lat').value = e.latlng.lat.toFixed(6);
-    document.getElementById('lon').value = e.latlng.lng.toFixed(6);
+    fetch('/set_center', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({lat: e.latlng.lat, lon: e.latlng.lng})
+    }).then(()=>update());
 });
 
 function setCenter() {
@@ -152,7 +155,8 @@ function update() {
         document.getElementById('coords').innerText = center ? `Center: [${center.map(x=>x.toFixed(4)).join(', ')}]` : 'Center: Not set';
         document.getElementById('endcoords').innerText = data.end ? `End Pivot: [${data.end.map(x=>x.toFixed(4)).join(', ')}]` : 'End Pivot: Not set';
         document.getElementById('azimuth').innerText = data.azimuth!==null ? `Azimuth: ${data.azimuth.toFixed(2)}°` : 'Azimuth: Not calculated';
-        document.getElementById('timer').innerText = `Timer: ${Math.floor(data.timer/3600).toString().padStart(2,'0')}:${Math.floor((data.timer/60)%60).toString().padStart(2,'0')}`;
+        let t = Math.floor(data.timer);
+        document.getElementById('timer').innerText = `Timer: ${String(Math.floor(t/3600)).padStart(2,'0')}:${String(Math.floor((t/60)%60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
         document.getElementById('status').innerText = data.running ? 'Simulation: Running' : 'Simulation: Stopped';
         document.getElementById('mode').value = data.mode;
         document.getElementById('modeval').innerText = data.mode+'%';
