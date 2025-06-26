@@ -2,7 +2,7 @@ import math
 import os
 from flask import Flask, render_template_string, request, jsonify
 import folium
-from branca.element import MacroElement, Template
+from branca.element import MacroElement, Template  # type: ignore
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -325,9 +325,9 @@ def index():
             return false;
         }}
         // --- Pivot Control JS ---
-        const PIVOT_SPEEDS = {{"20:1":4.886,"25:1":3.909,"30:1":3.257,"40:1":2.443,"50:1":1.954,"60:1":1.628}};
+        const PIVOT_SPEEDS = {{{{"20:1":4.886,"25:1":3.909,"30:1":3.257,"40:1":2.443,"50:1":1.954,"60:1":1.628}}}};
         let pivotState = null;
-        function updatePivotUI(state) {{
+        function updatePivotUI(state) {{{{
             // Показывать/скрывать блоки
             const show = state && state.pivot_length && state.loc1;
             document.getElementById('pivot_control_panel').style.display = show ? '' : 'none';
@@ -335,14 +335,14 @@ def index():
             // Таймер
             let t = Math.floor(state.pivot_timer || 0);
             let h = Math.floor(t/3600), m = Math.floor((t%3600)/60), s = t%60;
-            document.getElementById('pivot_timer_display').innerText = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+            document.getElementById('pivot_timer_display').innerText = `${{h.toString().padStart(2,'0')}}:${{m.toString().padStart(2,'0')}}:${{s.toString().padStart(2,'0')}}`;
             // Расчетные данные
             document.getElementById('circumference_val').innerText = state.circumference ? state.circumference.toFixed(2) : '-';
             document.getElementById('rotation_time_val').innerText = state.rotation_time ? state.rotation_time.toFixed(1) : '-';
             // Скорости
             let names = '', vals = '';
             Object.entries(PIVOT_SPEEDS).forEach(([k,v])=>{{
-                names += `<th>${k}</th>`;
+                names += `<th>${{k}}</th>`;
                 vals += `<td class='${{Math.abs((state.pivot_speed||0)-v)<0.001?'selected':''}}' data-speed='${{v}}'>${{v}}</td>`;
             }});
             document.getElementById('speed_names').innerHTML = names;
@@ -352,56 +352,56 @@ def index():
             slider.value = state.pivot_mode||100;
             document.getElementById('mode_slider_val').innerText = slider.value+'%';
             // Time factor
-            document.querySelectorAll('.pivot-btn.timefactor').forEach(btn=>{{
+            document.querySelectorAll('.pivot-btn.timefactor').forEach(btn=>{{{{
                 btn.classList.toggle('active', parseInt(btn.dataset.factor)==state.pivot_time_factor);
-            }});
+            }}}});
             // Direction
             document.getElementById('dir_cw_btn').classList.toggle('active', state.pivot_direction==1);
             document.getElementById('dir_ccw_btn').classList.toggle('active', state.pivot_direction==-1);
             // Start/Stop
             document.getElementById('start_btn').disabled = !!state.pivot_running;
             document.getElementById('stop_btn').disabled = !state.pivot_running;
-        }}
-        function sendPivotControl(action, data={{}}) {{
-            fetch('/pivot_control', {{
+        }}}}
+        function sendPivotControl(action, data={{{{}}}}) {{{{
+            fetch('/pivot_control', {{{{
                 method: 'POST',
-                headers: {{'Content-Type':'application/json'}},
-                body: JSON.stringify(Object.assign({{action}}, data))
-            }}).then(()=>setTimeout(fetchPivotState, 200));
-        }}
-        function fetchPivotState() {{
-            fetch('/pivot_state').then(r=>r.json()).then(state=>{{
+                headers: {{{{'Content-Type':'application/json'}}}},
+                body: JSON.stringify(Object.assign({{{{action}}}}, data))
+            }}}}).then(()=>setTimeout(fetchPivotState, 200));
+        }}}}
+        function fetchPivotState() {{{{
+            fetch('/pivot_state').then(r=>r.json()).then(state=>{{{{
                 pivotState = state;
                 updatePivotUI(state);
-            }});
-        }}
+            }}}});
+        }}}}
         // --- Event listeners ---
-        document.addEventListener('DOMContentLoaded', function() {{
+        document.addEventListener('DOMContentLoaded', function() {{{{
             fetchPivotState();
             setInterval(fetchPivotState, 1000);
             // Speed table
-            document.getElementById('speed_values').onclick = function(e) {{
-                if(e.target.tagName==='TD') sendPivotControl('set_speed', {{speed: e.target.dataset.speed}});
-            }};
+            document.getElementById('speed_values').onclick = function(e) {{{{
+                if(e.target.tagName==='TD') sendPivotControl('set_speed', {{{{speed: e.target.dataset.speed}}}});
+            }}}};
             // Mode slider
-            document.getElementById('mode_slider').oninput = function(e) {{
+            document.getElementById('mode_slider').oninput = function(e) {{{{
                 document.getElementById('mode_slider_val').innerText = e.target.value+'%';
-            }};
-            document.getElementById('mode_slider').onchange = function(e) {{
-                sendPivotControl('set_mode', {{mode: e.target.value}});
-            }};
+            }}}};
+            document.getElementById('mode_slider').onchange = function(e) {{{{
+                sendPivotControl('set_mode', {{{{mode: e.target.value}}}});
+            }}}};
             // Time factor
-            document.querySelectorAll('.pivot-btn.timefactor').forEach(btn=>{{
-                btn.onclick = ()=>sendPivotControl('set_time_factor', {{factor: btn.dataset.factor}});
-            }});
+            document.querySelectorAll('.pivot-btn.timefactor').forEach(btn=>{{{{
+                btn.onclick = ()=>sendPivotControl('set_time_factor', {{{{factor: btn.dataset.factor}}}});
+            }}}});
             // Direction
-            document.getElementById('dir_cw_btn').onclick = ()=>sendPivotControl('set_direction', {{direction:1}});
-            document.getElementById('dir_ccw_btn').onclick = ()=>sendPivotControl('set_direction', {{direction:-1}});
+            document.getElementById('dir_cw_btn').onclick = ()=>sendPivotControl('set_direction', {{{{direction:1}}}});
+            document.getElementById('dir_ccw_btn').onclick = ()=>sendPivotControl('set_direction', {{{{direction:-1}}}});
             // Start/Stop/Reset
             document.getElementById('start_btn').onclick = ()=>sendPivotControl('start');
             document.getElementById('stop_btn').onclick = ()=>sendPivotControl('stop');
             document.getElementById('reset_btn').onclick = ()=>sendPivotControl('reset');
-        }});
+        }}}});
         </script>
     </body>
     </html>
