@@ -142,7 +142,7 @@ def index():
     macro._template = Template(js_click_listener_template)
     folium_map.add_child(macro)
 
-    map_html_representation = folium_map._repr_html_()
+    map_html_representation = folium_map.get_root().render()
 
     html_content_page = """
     <!DOCTYPE html>
