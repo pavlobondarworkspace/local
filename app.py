@@ -1,6 +1,6 @@
 import math
 import os
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, render_template_string, request, jsonify, Response
 import folium
 from branca.element import MacroElement, Template  # type: ignore
 
@@ -412,7 +412,7 @@ def index():
         azimuth_disp=('%.2f°' % app_data['azimuth']) if app_data['azimuth'] is not None else 'Not calculated',
         map_html_representation=map_html_representation
     )
-    return render_template_string(html_content_page)
+    return Response(html_content_page, content_type='text/html')
 
 @app.route('/set_coordinate', methods=['POST'])
 def set_coordinate_endpoint():
