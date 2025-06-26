@@ -153,13 +153,13 @@ def index():
 
     html_content_page = f'''
     <!DOCTYPE html>
-    <html lang='en'>
+    <html lang="en">
     <head>
-        <meta charset='UTF-8'>
-        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Interactive Azimuth App (SwalFix)</title>
-        <script src='https://cdn.jsdelivr.net/npm/sweetalert2@11'></script>
-        <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css'>
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
         <style>
             body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 15px; background-color: #eef2f7; color: #333; }}
             .container {{ max-width: 900px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
@@ -176,61 +176,61 @@ def index():
         </style>
     </head>
     <body>
-        <div class='container'>
+        <div class="container">
             <h1>Interactive Azimuth App (SwalFix)</h1>
-            <div class='info-panel'>
-                <p id='status_display'>{app_data['status_message']}</p>
-                <p>Center Pivot: <span id='loc1_coords_display'>{'Not set' if not app_data['loc1'] else '[{:.4f}, {:.4f}]'.format(app_data['loc1'][0], app_data['loc1'][1])}</span></p>
-                <p>End Pivot (dynamic): <span id='loc2_coords_display'>{'Not set' if not app_data['loc2'] else '[{:.4f}, {:.4f}]'.format(app_data['loc2'][0], app_data['loc2'][1])}</span></p>
-                <p>Azimuth: <span id='azimuth_result_display'>{('%.2f°' % app_data['azimuth']) if app_data['azimuth'] is not None else 'Not calculated'}</span></p>
+            <div class="info-panel">
+                <p id="status_display">{app_data['status_message']}</p>
+                <p>Center Pivot: <span id="loc1_coords_display">{'Not set' if not app_data['loc1'] else '[{:.4f}, {:.4f}]'.format(app_data['loc1'][0], app_data['loc1'][1])}</span></p>
+                <p>End Pivot (dynamic): <span id="loc2_coords_display">{'Not set' if not app_data['loc2'] else '[{:.4f}, {:.4f}]'.format(app_data['loc2'][0], app_data['loc2'][1])}</span></p>
+                <p>Azimuth: <span id="azimuth_result_display">{('%.2f°' % app_data['azimuth']) if app_data['azimuth'] is not None else 'Not calculated'}</span></p>
             </div>
-            <div class='button-panel'>
-                <form id='manual_center_pivot_form' style='display:inline-block; margin-left:10px;' onsubmit='return setCenterPivotManual(event)'>
-                    <input type='number' step='any' id='manual_center_lat' placeholder='Lat' required style='width:90px;'>
-                    <input type='number' step='any' id='manual_center_lng' placeholder='Lng' required style='width:90px;'>
-                    <button type='submit'>Set Center Pivot (manual)</button>
+            <div class="button-panel">
+                <form id="manual_center_pivot_form" style="display:inline-block; margin-left:10px;" onsubmit="return setCenterPivotManual(event)">
+                    <input type="number" step="any" id="manual_center_lat" placeholder="Lat" required style="width:90px;">
+                    <input type="number" step="any" id="manual_center_lng" placeholder="Lng" required style="width:90px;">
+                    <button type="submit">Set Center Pivot (manual)</button>
                 </form>
-                <form id='pivot_length_form' style='display:inline-block; margin-left:10px;' onsubmit='return setPivotLength(event)'>
-                    <input type='number' step='any' id='pivot_length_input' placeholder='Pivot Length (m)' min='1' required style='width:120px;' value='{app_data.get('pivot_length') if app_data.get('pivot_length') else ''}'>
-                    <button type='submit'>Set Pivot Length</button>
+                <form id="pivot_length_form" style="display:inline-block; margin-left:10px;" onsubmit="return setPivotLength(event)">
+                    <input type="number" step="any" id="pivot_length_input" placeholder="Pivot Length (m)" min="1" required style="width:120px;" value="{app_data.get('pivot_length') if app_data.get('pivot_length') else ''}">
+                    <button type="submit">Set Pivot Length</button>
                 </form>
-                <button class='reset-button' onclick='resetGlobalSelections()'>Reset All Selections</button>
+                <button class="reset-button" onclick="resetGlobalSelections()">Reset All Selections</button>
             </div>
-            <div class='info-panel' id='pivot_warning' style='display:none; color:#b71c1c; background:#ffeaea;'>Для симуляции задайте Center Pivot и длину машины.</div>
-            <div class='info-panel' id='pivot_control_block' style='display:none;'>
-                <h3 style='margin-top:0;'>Управление движением</h3>
-                <div style='display:flex; flex-wrap:wrap; align-items:center; gap:10px;'>
-                    <button id='dir_ccw_btn' onclick='setDirection(-1)'>⟲ Против часовой</button>
-                    <button id='dir_cw_btn' onclick='setDirection(1)'>⟳ По часовой</button>
-                    <button id='start_stop_btn' onclick='toggleStartStop()'>{'Стоп' if app_data['pivot_running'] else 'Старт'}</button>
+            <div class="info-panel" id="pivot_warning" style="display:none; color:#b71c1c; background:#ffeaea;">Для симуляции задайте Center Pivot и длину машины.</div>
+            <div class="info-panel" id="pivot_control_block" style="display:none;">
+                <h3 style="margin-top:0;">Управление движением</h3>
+                <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+                    <button id="dir_ccw_btn" onclick="setDirection(-1)">⟲ Против часовой</button>
+                    <button id="dir_cw_btn" onclick="setDirection(1)">⟳ По часовой</button>
+                    <button id="start_stop_btn" onclick="toggleStartStop()">{'Стоп' if app_data['pivot_running'] else 'Старт'}</button>
                     <span>Скорость:</span>
-                    <select id='speed_select' onchange='setSpeed()'>
-                        <option value='4.886' {'selected' if app_data['pivot_speed']==4.886 else ''}>20:1 (4.886 м/мин)</option>
-                        <option value='3.909' {'selected' if app_data['pivot_speed']==3.909 else ''}>25:1 (3.909 м/мин)</option>
-                        <option value='3.257' {'selected' if app_data['pivot_speed']==3.257 else ''}>30:1 (3.257 м/мин)</option>
-                        <option value='2.443' {'selected' if app_data['pivot_speed']==2.443 else ''}>40:1 (2.443 м/мин)</option>
-                        <option value='1.954' {'selected' if app_data['pivot_speed']==1.954 else ''}>50:1 (1.954 м/мин)</option>
-                        <option value='1.628' {'selected' if app_data['pivot_speed']==1.628 else ''}>60:1 (1.628 м/мин)</option>
+                    <select id="speed_select" onchange="setSpeed()">
+                        <option value="4.886" {'selected' if app_data['pivot_speed']==4.886 else ''}>20:1 (4.886 м/мин)</option>
+                        <option value="3.909" {'selected' if app_data['pivot_speed']==3.909 else ''}>25:1 (3.909 м/мин)</option>
+                        <option value="3.257" {'selected' if app_data['pivot_speed']==3.257 else ''}>30:1 (3.257 м/мин)</option>
+                        <option value="2.443" {'selected' if app_data['pivot_speed']==2.443 else ''}>40:1 (2.443 м/мин)</option>
+                        <option value="1.954" {'selected' if app_data['pivot_speed']==1.954 else ''}>50:1 (1.954 м/мин)</option>
+                        <option value="1.628" {'selected' if app_data['pivot_speed']==1.628 else ''}>60:1 (1.628 м/мин)</option>
                     </select>
                     <span>Режим работы:</span>
-                    <input type='range' id='mode_slider' min='0' max='100' value='{app_data['pivot_mode']}' step='1' oninput='setMode()'>
-                    <span id='mode_value'>{app_data['pivot_mode']}%</span>
-                    <span>Таймер: <span id='pivot_timer_display'>{app_data['pivot_timer']//3600:02d}:{(app_data['pivot_timer']//60)%60:02d}</span></span>
-                    <button onclick='resetPivot()'>Reset</button>
+                    <input type="range" id="mode_slider" min="0" max="100" value="{app_data['pivot_mode']}" step="1" oninput="setMode()">
+                    <span id="mode_value">{app_data['pivot_mode']}%</span>
+                    <span>Таймер: <span id="pivot_timer_display">{app_data['pivot_timer']//3600:02d}:{(app_data['pivot_timer']//60)%60:02d}</span></span>
+                    <button onclick="resetPivot()">Reset</button>
                     <span>Ускорение:</span>
-                    <button onclick='setTimeFactor(1)'>x1</button>
-                    <button onclick='setTimeFactor(2)'>x2</button>
-                    <button onclick='setTimeFactor(10)'>x10</button>
-                    <button onclick='setTimeFactor(100)'>x100</button>
-                    <button onclick='setTimeFactor(1000)'>x1000</button>
+                    <button onclick="setTimeFactor(1)">x1</button>
+                    <button onclick="setTimeFactor(2)">x2</button>
+                    <button onclick="setTimeFactor(10)">x10</button>
+                    <button onclick="setTimeFactor(100)">x100</button>
+                    <button onclick="setTimeFactor(1000)">x1000</button>
                 </div>
             </div>
-            <div class='info-panel' id='pivot_calc_block' style='margin-top:10px; background:#f8e9f0; display:none;'>
-                <h3 style='margin-top:0;'>Расчётные данные</h3>
-                <p>Длина окружности: <span id='circle_length_display'>{(2*math.pi*app_data['pivot_length']) if app_data['pivot_length'] else 0:.2f} м</span> </p>
-                <p>Время полного оборота: <span id='circle_time_display'>{((2*math.pi*app_data['pivot_length'])/(app_data['pivot_speed'] if app_data['pivot_speed'] else 1)/ (app_data['pivot_mode']/100 if app_data['pivot_mode'] else 1)) / (app_data['pivot_time_factor'] if app_data['pivot_time_factor'] else 1) if app_data['pivot_length'] else 0:.2f} мин</span></p>
+            <div class="info-panel" id="pivot_calc_block" style="margin-top:10px; background:#f8e9f0; display:none;">
+                <h3 style="margin-top:0;">Расчётные данные</h3>
+                <p>Длина окружности: <span id="circle_length_display">{(2*math.pi*app_data['pivot_length']) if app_data['pivot_length'] else 0:.2f} м</span> </p>
+                <p>Время полного оборота: <span id="circle_time_display">{((2*math.pi*app_data['pivot_length'])/(app_data['pivot_speed'] if app_data['pivot_speed'] else 1)/(app_data['pivot_mode']/100 if app_data['pivot_mode'] else 1)/(app_data['pivot_time_factor'] if app_data['pivot_time_factor'] else 1)) if app_data['pivot_length'] else 0:.2f} мин</span></p>
             </div>
-            <div id='map_display_area'>{map_html_representation}</div>
+            <div id="map_display_area">{map_html_representation}</div>
         </div>
         <script>
             // ... существующие функции ...
