@@ -31,9 +31,9 @@ def index():
     folium_map = folium.Map(location=map_center, zoom_start=2)
 
     if app_data["loc1"]:
-        folium.Marker(location=app_data["loc1"], popup="Location 1", icon=folium.Icon(color='blue', icon='1', prefix='fa')).add_to(folium_map)
+        folium.Marker(location=app_data["loc1"], popup="Center Pivot", icon=folium.Icon(color='blue', icon='1', prefix='fa')).add_to(folium_map)
     if app_data["loc2"]:
-        folium.Marker(location=app_data["loc2"], popup="Location 2", icon=folium.Icon(color='red', icon='2', prefix='fa')).add_to(folium_map)
+        folium.Marker(location=app_data["loc2"], popup="End Pivot", icon=folium.Icon(color='red', icon='2', prefix='fa')).add_to(folium_map)
 
     # Relay function: defines handleGlobalMapInteraction in iframe, relays to parent handler
     relay_js = """
@@ -100,8 +100,8 @@ def index():
             <h1>Interactive Azimuth App (SwalFix)</h1>
             <div class="info-panel">
                 <p id="status_display">{app_data['status_message']}</p>
-                <p>Location 1: <span id="loc1_coords_display">{'Not set' if not app_data['loc1'] else '[{:.4f}, {:.4f}]'.format(app_data['loc1'][0], app_data['loc1'][1])}</span></p>
-                <p>Location 2: <span id="loc2_coords_display">{'Not set' if not app_data['loc2'] else '[{:.4f}, {:.4f}]'.format(app_data['loc2'][0], app_data['loc2'][1])}</span></p>
+                <p>Center Pivot: <span id="loc1_coords_display">{'Not set' if not app_data['loc1'] else '[{:.4f}, {:.4f}]'.format(app_data['loc1'][0], app_data['loc1'][1])}</span></p>
+                <p>End Pivot: <span id="loc2_coords_display">{'Not set' if not app_data['loc2'] else '[{:.4f}, {:.4f}]'.format(app_data['loc2'][0], app_data['loc2'][1])}</span></p>
                 <p>Azimuth: <span id="azimuth_result_display">{('%.2f°' % app_data['azimuth']) if app_data['azimuth'] is not None else 'Not calculated'}</span></p>
             </div>
             <div class="button-panel">
@@ -121,19 +121,17 @@ def index():
 
         <script>
             async function handleGlobalMapInteraction(latitude, longitude) {{
-                let targetLoc, confirmQuestion;
+                // Только для Center Pivot (loc1)
                 const loc1IsSet_el = document.getElementById('loc1_coords_display');
-                const loc2IsSet_el = document.getElementById('loc2_coords_display');
                 const loc1IsSet = loc1IsSet_el && !loc1IsSet_el.innerText.includes('Not set');
-                const loc2IsSet = loc2IsSet_el && !loc2IsSet_el.innerText.includes('Not set');
-
-                if (!loc1IsSet) {{ targetLoc = 1; confirmQuestion = `Set Center Pivot: (${{latitude}}, ${{longitude}})?`; }}
-                else if (!loc2IsSet) {{ targetLoc = 2; confirmQuestion = `Set End Pivot: (${{latitude}}, ${{longitude}})?`; }}
-                else {{ Swal.fire('Selection Full', 'Both pivots set. Reset to change.', 'info'); return; }}
-
+                if (loc1IsSet) {{
+                    Swal.fire('Center Pivot already set', 'Use reset to change.', 'info');
+                    return;
+                }}
+                let confirmQuestion = `Set Center Pivot: (${{latitude}}, ${{longitude}})?`;
                 const confirmation = await Swal.fire({{ title: 'Confirm Point', text: confirmQuestion, icon: 'question', showCancelButton: true, confirmButtonText: 'Yes', cancelButtonText: 'Cancel' }});
-                if (confirmation.isConfirmed) {{ 
-                    await processGlobalCoordinateSelection(latitude, longitude, targetLoc); 
+                if (confirmation.isConfirmed) {{
+                    await processGlobalCoordinateSelection(latitude, longitude, 1);
                 }}
             }}
 
@@ -170,6 +168,36 @@ def index():
                         Swal.fire('Network Error', 'Failed to communicate for reset: ' + err.toString(), 'error');
                     }}
                 }}
+            }}
+
+            async function setCenterPivotManual(event) {{
+                event.preventDefault();
+                const lat = document.getElementById('manual_center_lat').value;
+                const lng = document.getElementById('manual_center_lng').value;
+                await processGlobalCoordinateSelection(lat, lng, 1);
+                // Не сбрасываем значения, просто обновляем страницу для отображения
+                window.location.reload();
+                return false;
+            }}
+
+            async function setPivotLength(event) {{
+                event.preventDefault();
+                const length = document.getElementById('pivot_length_input').value;
+                try {{
+                    const response = await fetch('/set_pivot_length', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ length: parseFloat(length) }})
+                    }});
+                    const result = await response.json();
+                    if (result.success) {{
+                        Swal.fire({{ title: 'Pivot Length Set!', text: result.message, icon: 'success', timer: 1200, showConfirmButton: false }});
+                        window.location.reload();
+                    }} else {{ Swal.fire('Error', result.message || 'Unknown error.', 'error'); }}
+                }} catch (err) {{
+                    Swal.fire('Network Error', 'Failed to set length: ' + err.toString(), 'error');
+                }}
+                return false;
             }}
         </script>
     </body>
