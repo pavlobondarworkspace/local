@@ -41,22 +41,23 @@ def tick():
         now = time.time()
         dt = (now - state["last_tick"]) * state["time_factor"]
         state["last_tick"] = now
-        if state["running"] and state["center"] and state["length"]:
-            mode = state["mode"] / 100.0
-            cycle = 60.0
-            t_in_cycle = (state["timer"] % cycle)
-            move_time = cycle * mode
-            if t_in_cycle < move_time:
-                dt_move = min(dt, move_time - t_in_cycle)
-            else:
-                dt_move = 0
-            R = state["length"]
-            v = state["speed"]  # м/мин
-            if R > 0 and v > 0 and dt_move > 0:
-                omega = v / (60 * R)  # рад/сек
-                d_angle = math.degrees(omega * dt_move) * state["direction"]
-                state["angle"] = (state["angle"] + d_angle) % 360.0
-        state["timer"] += dt
+        if state["running"]:
+            state["timer"] += dt
+            if state["center"] and state["length"]:
+                mode = state["mode"] / 100.0
+                cycle = 60.0
+                t_in_cycle = (state["timer"] % cycle)
+                move_time = cycle * mode
+                if t_in_cycle < move_time:
+                    dt_move = min(dt, move_time - t_in_cycle)
+                else:
+                    dt_move = 0
+                R = state["length"]
+                v = state["speed"]
+                if R > 0 and v > 0 and dt_move > 0:
+                    omega = v / (60 * R)
+                    d_angle = math.degrees(omega * dt_move) * state["direction"]
+                    state["angle"] = (state["angle"] + d_angle) % 360.0
 
 def get_circle_length():
     return 2 * math.pi * state["length"] if state["length"] else 0
@@ -161,6 +162,7 @@ def reset():
         state["direction"] = 1
         state["time_factor"] = 1
         state["last_tick"] = time.time()
+        state["timer"] = 0
     return jsonify(success=True)
 
 if __name__ == "__main__":
