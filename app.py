@@ -3,6 +3,8 @@ import os
 from flask import Flask, render_template_string, request, jsonify
 import folium
 from branca.element import MacroElement, Template
+from threading import Lock
+import time
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -12,8 +14,18 @@ app.secret_key = os.environ.get('SECRET_KEY', 'interactive_app_secret_key_swal_f
 app_data = {
     "loc1": None, "loc2": None, "azimuth": None,
     "status_message": "IAApp(SwalFix): Click map for Location 1.",
-    "pivot_length": None
+    "pivot_length": None,
+    "pivot_angle": 0.0,  # текущий угол (градусы)
+    "pivot_direction": 1,  # 1 = по часовой, -1 = против
+    "pivot_running": False,  # идёт ли движение
+    "pivot_speed": 4.886,  # м/мин (по умолчанию)
+    "pivot_mode": 100,  # % работы
+    "pivot_timer": 0,  # секунд с момента старта
+    "pivot_time_factor": 1,  # ускорение времени (1, 2, 10, 100, 1000)
 }
+
+app_data_lock = Lock()
+last_tick_time = [time.time()]
 
 def calculate_azimuth(lat1, lon1, lat2, lon2):
     lat1_rad, lon1_rad = math.radians(lat1), math.radians(lon1)
@@ -43,6 +55,27 @@ def calculate_end_pivot_by_angle(lat, lon, length_m, angle_deg):
         math.cos(d_div_r) - math.sin(lat_rad) * math.sin(lat2_rad)
     )
     return [math.degrees(lat2_rad), math.degrees(lon2_rad)]
+
+def pivot_tick():
+    """Обновляет угол и таймер в зависимости от состояния симуляции."""
+    with app_data_lock:
+        now = time.time()
+        dt = now - last_tick_time[0]
+        last_tick_time[0] = now
+        if app_data['pivot_running'] and app_data['loc1'] and app_data['pivot_length']:
+            # Учитываем ускорение времени
+            dt *= app_data['pivot_time_factor']
+            # Режим работы (0-100%)
+            mode = app_data['pivot_mode'] / 100.0 if app_data['pivot_mode'] else 1.0
+            # Время движения за dt
+            move_dt = dt * mode
+            # Угол прироста (градусы)
+            circle_length = 2 * math.pi * app_data['pivot_length']
+            if circle_length > 0:
+                speed = app_data['pivot_speed']
+                d_angle = 360.0 * (speed * move_dt) / circle_length * app_data['pivot_direction']
+                app_data['pivot_angle'] = (app_data['pivot_angle'] + d_angle) % 360.0
+            app_data['pivot_timer'] += int(dt)
 
 @app.route('/')
 def index():
@@ -108,13 +141,13 @@ def index():
 
     html_content_page = f"""
     <!DOCTYPE html>
-    <html lang="en">
+    <html lang=\"en\">
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset=\"UTF-8\">
+        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
         <title>Interactive Azimuth App (SwalFix)</title>
-        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+        <script src=\"https://cdn.jsdelivr.net/npm/sweetalert2@11\"></script>
+        <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css\">
         <style>
             body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 15px; background-color: #eef2f7; color: #333; }}
             .container {{ max-width: 900px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
@@ -131,30 +164,64 @@ def index():
         </style>
     </head>
     <body>
-        <div class="container">
+        <div class=\"container\">
             <h1>Interactive Azimuth App (SwalFix)</h1>
-            <div class="info-panel">
-                <p id="status_display">{app_data['status_message']}</p>
-                <p>Center Pivot: <span id="loc1_coords_display">{'Not set' if not app_data['loc1'] else '[{:.4f}, {:.4f}]'.format(app_data['loc1'][0], app_data['loc1'][1])}</span></p>
-                <p>End Pivot: <span id="loc2_coords_display">{'Not set' if not app_data['loc2'] else '[{:.4f}, {:.4f}]'.format(app_data['loc2'][0], app_data['loc2'][1])}</span></p>
-                <p>Azimuth: <span id="azimuth_result_display">{('%.2f°' % app_data['azimuth']) if app_data['azimuth'] is not None else 'Not calculated'}</span></p>
+            <div class=\"info-panel\">
+                <p id=\"status_display\">{app_data['status_message']}</p>
+                <p>Center Pivot: <span id=\"loc1_coords_display\">{'Not set' if not app_data['loc1'] else '[{:.4f}, {:.4f}]'.format(app_data['loc1'][0], app_data['loc1'][1])}</span></p>
+                <p>End Pivot: <span id=\"loc2_coords_display\">{'Not set' if not app_data['loc2'] else '[{:.4f}, {:.4f}]'.format(app_data['loc2'][0], app_data['loc2'][1])}</span></p>
+                <p>Azimuth: <span id=\"azimuth_result_display\">{('%.2f°' % app_data['azimuth']) if app_data['azimuth'] is not None else 'Not calculated'}</span></p>
             </div>
-            <div class="button-panel">
-                <form id="manual_center_pivot_form" style="display:inline-block; margin-left:10px;" onsubmit="return setCenterPivotManual(event)">
-                    <input type="number" step="any" id="manual_center_lat" placeholder="Lat" required style="width:90px;">
-                    <input type="number" step="any" id="manual_center_lng" placeholder="Lng" required style="width:90px;">
-                    <button type="submit">Set Center Pivot (manual)</button>
+            <div class=\"button-panel\">
+                <form id=\"manual_center_pivot_form\" style=\"display:inline-block; margin-left:10px;\" onsubmit=\"return setCenterPivotManual(event)\">
+                    <input type=\"number\" step=\"any\" id=\"manual_center_lat\" placeholder=\"Lat\" required style=\"width:90px;\">
+                    <input type=\"number\" step=\"any\" id=\"manual_center_lng\" placeholder=\"Lng\" required style=\"width:90px;\">
+                    <button type=\"submit\">Set Center Pivot (manual)</button>
                 </form>
-                <form id="pivot_length_form" style="display:inline-block; margin-left:10px;" onsubmit="return setPivotLength(event)">
-                    <input type="number" step="any" id="pivot_length_input" placeholder="Pivot Length (m)" min="1" required style="width:120px;" value="{app_data.get('pivot_length') if app_data.get('pivot_length') else ''}">
-                    <button type="submit">Set Pivot Length</button>
+                <form id=\"pivot_length_form\" style=\"display:inline-block; margin-left:10px;\" onsubmit=\"return setPivotLength(event)\">
+                    <input type=\"number\" step=\"any\" id=\"pivot_length_input\" placeholder=\"Pivot Length (m)\" min=\"1\" required style=\"width:120px;\" value=\"{app_data.get('pivot_length') if app_data.get('pivot_length') else ''}\">
+                    <button type=\"submit\">Set Pivot Length</button>
                 </form>
-                <button class="reset-button" onclick="resetGlobalSelections()">Reset All Selections</button>
+                <button class=\"reset-button\" onclick=\"resetGlobalSelections()\">Reset All Selections</button>
             </div>
-            <div id="map_display_area">{map_html_representation}</div>
+            <div class=\"info-panel\" id=\"pivot_warning\" style=\"display:none; color:#b71c1c; background:#ffeaea;\">Для симуляции задайте Center Pivot и длину машины.</div>
+            <div class=\"info-panel\" id=\"pivot_control_block\" style=\"display:none;\">
+                <h3 style=\"margin-top:0;\">Управление движением</h3>
+                <div style=\"display:flex; flex-wrap:wrap; align-items:center; gap:10px;\">
+                    <button id=\"dir_ccw_btn\" onclick=\"setDirection(-1)\">⟲ Против часовой</button>
+                    <button id=\"dir_cw_btn\" onclick=\"setDirection(1)\">⟳ По часовой</button>
+                    <button id=\"start_stop_btn\" onclick=\"toggleStartStop()\">{'Стоп' if app_data['pivot_running'] else 'Старт'}</button>
+                    <span>Скорость:</span>
+                    <select id=\"speed_select\" onchange=\"setSpeed()\">
+                        <option value=\"4.886\" {'selected' if app_data['pivot_speed']==4.886 else ''}>20:1 (4.886 м/мин)</option>
+                        <option value=\"3.909\" {'selected' if app_data['pivot_speed']==3.909 else ''}>25:1 (3.909 м/мин)</option>
+                        <option value=\"3.257\" {'selected' if app_data['pivot_speed']==3.257 else ''}>30:1 (3.257 м/мин)</option>
+                        <option value=\"2.443\" {'selected' if app_data['pivot_speed']==2.443 else ''}>40:1 (2.443 м/мин)</option>
+                        <option value=\"1.954\" {'selected' if app_data['pivot_speed']==1.954 else ''}>50:1 (1.954 м/мин)</option>
+                        <option value=\"1.628\" {'selected' if app_data['pivot_speed']==1.628 else ''}>60:1 (1.628 м/мин)</option>
+                    </select>
+                    <span>Режим работы:</span>
+                    <input type=\"range\" id=\"mode_slider\" min=\"0\" max=\"100\" value=\"{app_data['pivot_mode']}\" step=\"1\" oninput=\"setMode()\">
+                    <span id=\"mode_value\">{app_data['pivot_mode']}%</span>
+                    <span>Таймер: <span id=\"pivot_timer_display\">{app_data['pivot_timer']//3600:02d}:{(app_data['pivot_timer']//60)%60:02d}</span></span>
+                    <button onclick=\"resetPivot()\">Reset</button>
+                    <span>Ускорение:</span>
+                    <button onclick=\"setTimeFactor(1)\">x1</button>
+                    <button onclick=\"setTimeFactor(2)\">x2</button>
+                    <button onclick=\"setTimeFactor(10)\">x10</button>
+                    <button onclick=\"setTimeFactor(100)\">x100</button>
+                    <button onclick=\"setTimeFactor(1000)\">x1000</button>
+                </div>
+            </div>
+            <div class=\"info-panel\" id=\"pivot_calc_block\" style=\"margin-top:10px; background:#f8e9f0; display:none;\">
+                <h3 style=\"margin-top:0;\">Расчётные данные</h3>
+                <p>Длина окружности: <span id=\"circle_length_display\">{(2*math.pi*app_data['pivot_length']) if app_data['pivot_length'] else 0:.2f} м</span> </p>
+                <p>Время полного оборота: <span id=\"circle_time_display\">{((2*math.pi*app_data['pivot_length'])/(app_data['pivot_speed'] if app_data['pivot_speed'] else 1)/ (app_data['pivot_mode']/100 if app_data['pivot_mode'] else 1)) / (app_data['pivot_time_factor'] if app_data['pivot_time_factor'] else 1) if app_data['pivot_length'] else 0:.2f} мин</span></p>
+            </div>
+            <div id=\"map_display_area\">{map_html_representation}</div>
         </div>
-
         <script>
+            // ... существующие функции ...
             async function handleGlobalMapInteraction(latitude, longitude) {{
                 // Только для Center Pivot (loc1)
                 const loc1IsSet_el = document.getElementById('loc1_coords_display');
@@ -210,7 +277,6 @@ def index():
                 const lat = document.getElementById('manual_center_lat').value;
                 const lng = document.getElementById('manual_center_lng').value;
                 await processGlobalCoordinateSelection(lat, lng, 1);
-                // Не сбрасываем значения, просто обновляем страницу для отображения
                 window.location.reload();
                 return false;
             }}
@@ -234,6 +300,130 @@ def index():
                 }}
                 return false;
             }}
+
+            // --- Управление движением ---
+            async function setDirection(dir) {{
+                await fetch('/pivot_control', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ action: 'direction', direction: dir }})
+                }});
+            }}
+            async function toggleStartStop() {{
+                const running = document.getElementById('start_stop_btn').innerText === 'Стоп';
+                await fetch('/pivot_control', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ action: running ? 'stop' : 'start' }})
+                }});
+            }}
+            async function setSpeed() {{
+                const speed = document.getElementById('speed_select').value;
+                await fetch('/pivot_control', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ action: 'speed', speed: speed }})
+                }});
+            }}
+            async function setMode() {{
+                const mode = document.getElementById('mode_slider').value;
+                document.getElementById('mode_value').innerText = mode + '%';
+                await fetch('/pivot_control', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ action: 'mode', mode: mode }})
+                }});
+            }}
+            async function setTimeFactor(factor) {{
+                await fetch('/pivot_control', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ action: 'time_factor', time_factor: factor }})
+                }});
+            }}
+            async function resetPivot() {{
+                await fetch('/pivot_control', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ action: 'reset' }})
+                }});
+            }}
+
+            // --- Периодический опрос статуса и обновление UI ---
+            let prevAngle = null;
+            async function pollPivotStatus() {{
+                try {{
+                    const resp = await fetch('/pivot_status');
+                    const data = await resp.json();
+                    // Таймер
+                    const t = data.timer;
+                    document.getElementById('pivot_timer_display').innerText =
+                        `${{String(Math.floor(t/3600)).padStart(2,'0')}}:${{String(Math.floor((t/60)%60)).padStart(2,'0')}}`;
+                    // Кнопка старт/стоп
+                    document.getElementById('start_stop_btn').innerText = data.running ? 'Стоп' : 'Старт';
+                    // Обновление End Pivot
+                    if (data.end_pivot) {{
+                        document.getElementById('loc2_coords_display').innerText = `[${{data.end_pivot[0].toFixed(4)}}, ${{data.end_pivot[1].toFixed(4)}}]`;
+                    }}
+                    // Визуализация сектора
+                    if (window.updateSectorArc) {{
+                        window.updateSectorArc(data.angle);
+                    }}
+                }} catch (e) {{ /* ignore */ }}
+                setTimeout(pollPivotStatus, 1000);
+            }}
+            pollPivotStatus();
+
+            // --- Визуализация сектора на карте (через Leaflet) ---
+            function addSectorArcToMap() {{
+                const iframe = document.querySelector('#map_display_area iframe');
+                if (!iframe) {{ setTimeout(addSectorArcToMap, 1000); return; }}
+                const win = iframe.contentWindow;
+                if (!win.L) {{ setTimeout(addSectorArcToMap, 1000); return; }}
+                let map = null;
+                for (let k in win) {{
+                    if (win[k] && win[k].setView && win[k].on) {{ map = win[k]; break; }}
+                }}
+                if (!map) {{ setTimeout(addSectorArcToMap, 1000); return; }}
+                const loc1 = {{lat: parseFloat(document.getElementById('loc1_coords_display').innerText.replace(/[^\d.,-]/g,'').split(',')[0]), lng: parseFloat(document.getElementById('loc1_coords_display').innerText.replace(/[^\d.,-]/g,'').split(',')[1])}};
+                const radius = parseFloat(document.getElementById('pivot_length_input').value);
+                if (!loc1.lat || !loc1.lng || !radius) return;
+                let sectorLayer = null, baseCircle = null;
+                window.updateSectorArc = function(angle) {{
+                    if (sectorLayer) {{ map.removeLayer(sectorLayer); }}
+                    if (baseCircle) {{ map.removeLayer(baseCircle); }}
+                    // Основной круг (светлый)
+                    baseCircle = win.L.circle([loc1.lat, loc1.lng], {{radius: radius, color:'#2980b9', fillColor:'#f7b6d2', fillOpacity:0.3, weight:2}});
+                    baseCircle.addTo(map);
+                    // Сектор (тёмный)
+                    const points = [];
+                    const steps = Math.max(2, Math.floor(Math.abs(angle)/2));
+                    let start = 0, end = angle;
+                    if (document.getElementById('dir_ccw_btn').classList.contains('active')) {{
+                        end = -angle;
+                    }}
+                    for (let a = start; Math.abs(a) <= Math.abs(end); a += (end-start)/steps) {{
+                        const theta = (a-90)*Math.PI/180;
+                        const lat = loc1.lat + (radius/111320)*Math.cos(theta);
+                        const lng = loc1.lng + (radius/111320)*Math.sin(theta)/Math.cos(loc1.lat*Math.PI/180);
+                        points.push([lat, lng]);
+                    }}
+                    points.unshift([loc1.lat, loc1.lng]);
+                    sectorLayer = win.L.polygon(points, {{color:'#e75480', fillColor:'#e75480', fillOpacity:0.3, weight:0}});
+                    sectorLayer.addTo(map);
+                }};
+            }}
+            setTimeout(addSectorArcToMap, 2000);
+
+            function checkPivotBlocks() {{
+                const loc1 = document.getElementById('loc1_coords_display').innerText;
+                const len = document.getElementById('pivot_length_input').value;
+                const show = loc1 && !loc1.includes('Not set') && len && parseFloat(len) > 0;
+                document.getElementById('pivot_control_block').style.display = show ? '' : 'none';
+                document.getElementById('pivot_calc_block').style.display = show ? '' : 'none';
+                document.getElementById('pivot_warning').style.display = show ? 'none' : '';
+            }}
+            setTimeout(checkPivotBlocks, 1000);
         </script>
     </body>
     </html>
@@ -274,6 +464,9 @@ def set_coordinate_endpoint():
 def reset_endpoint():
     app_data["loc1"], app_data["loc2"], app_data["azimuth"] = None, None, None
     app_data["status_message"] = "IAApp(SwalFix): Reset. Select Loc 1."
+    app_data["pivot_angle"] = 0.0
+    app_data["pivot_timer"] = 0
+    app_data["pivot_running"] = False
     return jsonify({"success": True, "message": "IAApp(SwalFix): Selections cleared."})
 
 @app.route('/set_pivot_length', methods=['POST'])
@@ -288,7 +481,50 @@ def set_pivot_length():
     except Exception as e:
         return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
 
-# Health check endpoint for monitoring
+@app.route('/pivot_control', methods=['POST'])
+def pivot_control():
+    with app_data_lock:
+        data = request.get_json()
+        action = data.get('action')
+        if action == 'start':
+            app_data['pivot_running'] = True
+        elif action == 'stop':
+            app_data['pivot_running'] = False
+        elif action == 'direction':
+            app_data['pivot_direction'] = int(data.get('direction', 1))
+        elif action == 'speed':
+            app_data['pivot_speed'] = float(data.get('speed', 4.886))
+        elif action == 'mode':
+            app_data['pivot_mode'] = int(data.get('mode', 100))
+        elif action == 'time_factor':
+            app_data['pivot_time_factor'] = int(data.get('time_factor', 1))
+        elif action == 'reset':
+            app_data['pivot_angle'] = 0.0
+            app_data['pivot_timer'] = 0
+            app_data['pivot_running'] = False
+        return jsonify({"success": True, "app_data": app_data})
+
+@app.route('/pivot_status', methods=['GET'])
+def pivot_status():
+    pivot_tick()
+    with app_data_lock:
+        loc1 = app_data['loc1']
+        pivot_length = app_data['pivot_length']
+        angle = app_data['pivot_angle']
+        end_pivot = None
+        if loc1 and pivot_length:
+            end_pivot = calculate_end_pivot_by_angle(loc1[0], loc1[1], float(pivot_length), angle)
+        return jsonify({
+            "angle": angle,
+            "timer": app_data['pivot_timer'],
+            "running": app_data['pivot_running'],
+            "direction": app_data['pivot_direction'],
+            "speed": app_data['pivot_speed'],
+            "mode": app_data['pivot_mode'],
+            "time_factor": app_data['pivot_time_factor'],
+            "end_pivot": end_pivot,
+        })
+
 @app.route('/health')
 def health_check():
     return jsonify({"status": "healthy", "message": "IAApp is running"})
@@ -298,4 +534,4 @@ if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
     print("Starting Interactive Azimuth App (Render.com Version)...")
     print(f"Port: {port}")
-    app.run(host='0.0.0.0', port=port, debug=debug_mode)
+    app.run(host='0.0.0.0', port=port, debug=debug_mode) 
