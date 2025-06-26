@@ -57,23 +57,31 @@ def calculate_end_pivot_by_angle(lat, lon, length_m, angle_deg):
     return [math.degrees(lat2_rad), math.degrees(lon2_rad)]
 
 def pivot_tick():
-    """Обновляет угол и таймер в зависимости от состояния симуляции."""
+    """Обновляет угол и таймер в зависимости от состояния симуляции с учётом режима (duty cycle)."""
     with app_data_lock:
         now = time.time()
         dt = now - last_tick_time[0]
         last_tick_time[0] = now
         if app_data['pivot_running'] and app_data['loc1'] and app_data['pivot_length']:
-            # Учитываем ускорение времени
             dt *= app_data['pivot_time_factor']
-            # Режим работы (0-100%)
             mode = app_data['pivot_mode'] / 100.0 if app_data['pivot_mode'] else 1.0
-            # Время движения за dt
-            move_dt = dt * mode
-            # Угол прироста (градусы)
+            # Duty cycle: если режим < 100%, то часть времени стоим
+            if mode < 1.0:
+                # 1 цикл = 60 сек (30 сек едет, 30 сек стоит при 50%)
+                cycle = 60.0
+                t_in_cycle = (app_data['pivot_timer'] % cycle)
+                move_time = cycle * mode
+                if t_in_cycle + dt > cycle:
+                    # Пересекаем границу duty cycle
+                    dt_move = max(0, move_time - t_in_cycle) if t_in_cycle < move_time else 0
+                else:
+                    dt_move = min(dt, max(0, move_time - t_in_cycle)) if t_in_cycle < move_time else 0
+            else:
+                dt_move = dt
             circle_length = 2 * math.pi * app_data['pivot_length']
-            if circle_length > 0:
+            if circle_length > 0 and dt_move > 0:
                 speed = app_data['pivot_speed']
-                d_angle = 360.0 * (speed * move_dt) / circle_length * app_data['pivot_direction']
+                d_angle = 360.0 * (speed * dt_move) / circle_length * app_data['pivot_direction']
                 app_data['pivot_angle'] = (app_data['pivot_angle'] + d_angle) % 360.0
             app_data['pivot_timer'] += int(dt)
 
@@ -84,15 +92,19 @@ def index():
 
     if app_data["loc1"]:
         folium.Marker(location=app_data["loc1"], popup="Center Pivot", icon=folium.Icon(color='blue', icon='1', prefix='fa')).add_to(folium_map)
-    # Если есть длина и Center Pivot, вычисляем End Pivot и рисуем всё
     pivot_length = app_data.get("pivot_length")
     if app_data["loc1"] and pivot_length is not None and float(pivot_length) > 0:
-        # Вычисляем End Pivot по нулевому азимуту (или по углу, если есть)
+        # Синяя линия (нулевой угол)
+        zero_angle = 0.0
+        end_pivot_zero = calculate_end_pivot_by_angle(app_data["loc1"][0], app_data["loc1"][1], float(pivot_length), zero_angle)
+        folium.Marker(location=end_pivot_zero, popup="End Pivot (0°)", icon=folium.Icon(color='blue', icon='2', prefix='fa')).add_to(folium_map)
+        folium.PolyLine([app_data["loc1"], end_pivot_zero], color='blue', weight=4).add_to(folium_map)
+        # Красная линия (текущий угол)
         angle = app_data.get("pivot_angle", 0.0)
         end_pivot = calculate_end_pivot_by_angle(app_data["loc1"][0], app_data["loc1"][1], float(pivot_length), angle)
         app_data["loc2"] = end_pivot
-        folium.Marker(location=end_pivot, popup="End Pivot", icon=folium.Icon(color='red', icon='2', prefix='fa')).add_to(folium_map)
-        folium.PolyLine([app_data["loc1"], end_pivot], color='blue', weight=4).add_to(folium_map)
+        folium.Marker(location=end_pivot, popup="End Pivot (dynamic)", icon=folium.Icon(color='red', icon='3', prefix='fa')).add_to(folium_map)
+        folium.PolyLine([app_data["loc1"], end_pivot], color='red', weight=4).add_to(folium_map)
         folium.Circle(
             location=app_data["loc1"],
             radius=float(pivot_length),
@@ -139,15 +151,15 @@ def index():
 
     map_html_representation = folium_map._repr_html_()
 
-    html_content_page = f"""
+    html_content_page = f'''
     <!DOCTYPE html>
-    <html lang=\"en\">
+    <html lang='en'>
     <head>
-        <meta charset=\"UTF-8\">
-        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
         <title>Interactive Azimuth App (SwalFix)</title>
-        <script src=\"https://cdn.jsdelivr.net/npm/sweetalert2@11\"></script>
-        <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css\">
+        <script src='https://cdn.jsdelivr.net/npm/sweetalert2@11'></script>
+        <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css'>
         <style>
             body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 15px; background-color: #eef2f7; color: #333; }}
             .container {{ max-width: 900px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
@@ -164,270 +176,252 @@ def index():
         </style>
     </head>
     <body>
-        <div class=\"container\">
+        <div class='container'>
             <h1>Interactive Azimuth App (SwalFix)</h1>
-            <div class=\"info-panel\">
-                <p id=\"status_display\">{app_data['status_message']}</p>
-                <p>Center Pivot: <span id=\"loc1_coords_display\">{'Not set' if not app_data['loc1'] else '[{:.4f}, {:.4f}]'.format(app_data['loc1'][0], app_data['loc1'][1])}</span></p>
-                <p>End Pivot: <span id=\"loc2_coords_display\">{'Not set' if not app_data['loc2'] else '[{:.4f}, {:.4f}]'.format(app_data['loc2'][0], app_data['loc2'][1])}</span></p>
-                <p>Azimuth: <span id=\"azimuth_result_display\">{('%.2f°' % app_data['azimuth']) if app_data['azimuth'] is not None else 'Not calculated'}</span></p>
+            <div class='info-panel'>
+                <p id='status_display'>{app_data['status_message']}</p>
+                <p>Center Pivot: <span id='loc1_coords_display'>{'Not set' if not app_data['loc1'] else '[{:.4f}, {:.4f}]'.format(app_data['loc1'][0], app_data['loc1'][1])}</span></p>
+                <p>End Pivot (dynamic): <span id='loc2_coords_display'>{'Not set' if not app_data['loc2'] else '[{:.4f}, {:.4f}]'.format(app_data['loc2'][0], app_data['loc2'][1])}</span></p>
+                <p>Azimuth: <span id='azimuth_result_display'>{('%.2f°' % app_data['azimuth']) if app_data['azimuth'] is not None else 'Not calculated'}</span></p>
             </div>
-            <div class=\"button-panel\">
-                <form id=\"manual_center_pivot_form\" style=\"display:inline-block; margin-left:10px;\" onsubmit=\"return setCenterPivotManual(event)\">
-                    <input type=\"number\" step=\"any\" id=\"manual_center_lat\" placeholder=\"Lat\" required style=\"width:90px;\">
-                    <input type=\"number\" step=\"any\" id=\"manual_center_lng\" placeholder=\"Lng\" required style=\"width:90px;\">
-                    <button type=\"submit\">Set Center Pivot (manual)</button>
+            <div class='button-panel'>
+                <form id='manual_center_pivot_form' style='display:inline-block; margin-left:10px;' onsubmit='return setCenterPivotManual(event)'>
+                    <input type='number' step='any' id='manual_center_lat' placeholder='Lat' required style='width:90px;'>
+                    <input type='number' step='any' id='manual_center_lng' placeholder='Lng' required style='width:90px;'>
+                    <button type='submit'>Set Center Pivot (manual)</button>
                 </form>
-                <form id=\"pivot_length_form\" style=\"display:inline-block; margin-left:10px;\" onsubmit=\"return setPivotLength(event)\">
-                    <input type=\"number\" step=\"any\" id=\"pivot_length_input\" placeholder=\"Pivot Length (m)\" min=\"1\" required style=\"width:120px;\" value=\"{app_data.get('pivot_length') if app_data.get('pivot_length') else ''}\">
-                    <button type=\"submit\">Set Pivot Length</button>
+                <form id='pivot_length_form' style='display:inline-block; margin-left:10px;' onsubmit='return setPivotLength(event)'>
+                    <input type='number' step='any' id='pivot_length_input' placeholder='Pivot Length (m)' min='1' required style='width:120px;' value='{app_data.get('pivot_length') if app_data.get('pivot_length') else ''}'>
+                    <button type='submit'>Set Pivot Length</button>
                 </form>
-                <button class=\"reset-button\" onclick=\"resetGlobalSelections()\">Reset All Selections</button>
+                <button class='reset-button' onclick='resetGlobalSelections()'>Reset All Selections</button>
             </div>
-            <div class=\"info-panel\" id=\"pivot_warning\" style=\"display:none; color:#b71c1c; background:#ffeaea;\">Для симуляции задайте Center Pivot и длину машины.</div>
-            <div class=\"info-panel\" id=\"pivot_control_block\" style=\"display:none;\">
-                <h3 style=\"margin-top:0;\">Управление движением</h3>
-                <div style=\"display:flex; flex-wrap:wrap; align-items:center; gap:10px;\">
-                    <button id=\"dir_ccw_btn\" onclick=\"setDirection(-1)\">⟲ Против часовой</button>
-                    <button id=\"dir_cw_btn\" onclick=\"setDirection(1)\">⟳ По часовой</button>
-                    <button id=\"start_stop_btn\" onclick=\"toggleStartStop()\">{'Стоп' if app_data['pivot_running'] else 'Старт'}</button>
+            <div class='info-panel' id='pivot_warning' style='display:none; color:#b71c1c; background:#ffeaea;'>Для симуляции задайте Center Pivot и длину машины.</div>
+            <div class='info-panel' id='pivot_control_block' style='display:none;'>
+                <h3 style='margin-top:0;'>Управление движением</h3>
+                <div style='display:flex; flex-wrap:wrap; align-items:center; gap:10px;'>
+                    <button id='dir_ccw_btn' onclick='setDirection(-1)'>⟲ Против часовой</button>
+                    <button id='dir_cw_btn' onclick='setDirection(1)'>⟳ По часовой</button>
+                    <button id='start_stop_btn' onclick='toggleStartStop()'>{'Стоп' if app_data['pivot_running'] else 'Старт'}</button>
                     <span>Скорость:</span>
-                    <select id=\"speed_select\" onchange=\"setSpeed()\">
-                        <option value=\"4.886\" {'selected' if app_data['pivot_speed']==4.886 else ''}>20:1 (4.886 м/мин)</option>
-                        <option value=\"3.909\" {'selected' if app_data['pivot_speed']==3.909 else ''}>25:1 (3.909 м/мин)</option>
-                        <option value=\"3.257\" {'selected' if app_data['pivot_speed']==3.257 else ''}>30:1 (3.257 м/мин)</option>
-                        <option value=\"2.443\" {'selected' if app_data['pivot_speed']==2.443 else ''}>40:1 (2.443 м/мин)</option>
-                        <option value=\"1.954\" {'selected' if app_data['pivot_speed']==1.954 else ''}>50:1 (1.954 м/мин)</option>
-                        <option value=\"1.628\" {'selected' if app_data['pivot_speed']==1.628 else ''}>60:1 (1.628 м/мин)</option>
+                    <select id='speed_select' onchange='setSpeed()'>
+                        <option value='4.886' {'selected' if app_data['pivot_speed']==4.886 else ''}>20:1 (4.886 м/мин)</option>
+                        <option value='3.909' {'selected' if app_data['pivot_speed']==3.909 else ''}>25:1 (3.909 м/мин)</option>
+                        <option value='3.257' {'selected' if app_data['pivot_speed']==3.257 else ''}>30:1 (3.257 м/мин)</option>
+                        <option value='2.443' {'selected' if app_data['pivot_speed']==2.443 else ''}>40:1 (2.443 м/мин)</option>
+                        <option value='1.954' {'selected' if app_data['pivot_speed']==1.954 else ''}>50:1 (1.954 м/мин)</option>
+                        <option value='1.628' {'selected' if app_data['pivot_speed']==1.628 else ''}>60:1 (1.628 м/мин)</option>
                     </select>
                     <span>Режим работы:</span>
-                    <input type=\"range\" id=\"mode_slider\" min=\"0\" max=\"100\" value=\"{app_data['pivot_mode']}\" step=\"1\" oninput=\"setMode()\">
-                    <span id=\"mode_value\">{app_data['pivot_mode']}%</span>
-                    <span>Таймер: <span id=\"pivot_timer_display\">{app_data['pivot_timer']//3600:02d}:{(app_data['pivot_timer']//60)%60:02d}</span></span>
-                    <button onclick=\"resetPivot()\">Reset</button>
+                    <input type='range' id='mode_slider' min='0' max='100' value='{app_data['pivot_mode']}' step='1' oninput='setMode()'>
+                    <span id='mode_value'>{app_data['pivot_mode']}%</span>
+                    <span>Таймер: <span id='pivot_timer_display'>{app_data['pivot_timer']//3600:02d}:{(app_data['pivot_timer']//60)%60:02d}</span></span>
+                    <button onclick='resetPivot()'>Reset</button>
                     <span>Ускорение:</span>
-                    <button onclick=\"setTimeFactor(1)\">x1</button>
-                    <button onclick=\"setTimeFactor(2)\">x2</button>
-                    <button onclick=\"setTimeFactor(10)\">x10</button>
-                    <button onclick=\"setTimeFactor(100)\">x100</button>
-                    <button onclick=\"setTimeFactor(1000)\">x1000</button>
+                    <button onclick='setTimeFactor(1)'>x1</button>
+                    <button onclick='setTimeFactor(2)'>x2</button>
+                    <button onclick='setTimeFactor(10)'>x10</button>
+                    <button onclick='setTimeFactor(100)'>x100</button>
+                    <button onclick='setTimeFactor(1000)'>x1000</button>
                 </div>
             </div>
-            <div class=\"info-panel\" id=\"pivot_calc_block\" style=\"margin-top:10px; background:#f8e9f0; display:none;\">
-                <h3 style=\"margin-top:0;\">Расчётные данные</h3>
-                <p>Длина окружности: <span id=\"circle_length_display\">{(2*math.pi*app_data['pivot_length']) if app_data['pivot_length'] else 0:.2f} м</span> </p>
-                <p>Время полного оборота: <span id=\"circle_time_display\">{((2*math.pi*app_data['pivot_length'])/(app_data['pivot_speed'] if app_data['pivot_speed'] else 1)/ (app_data['pivot_mode']/100 if app_data['pivot_mode'] else 1)) / (app_data['pivot_time_factor'] if app_data['pivot_time_factor'] else 1) if app_data['pivot_length'] else 0:.2f} мин</span></p>
+            <div class='info-panel' id='pivot_calc_block' style='margin-top:10px; background:#f8e9f0; display:none;'>
+                <h3 style='margin-top:0;'>Расчётные данные</h3>
+                <p>Длина окружности: <span id='circle_length_display'>{(2*math.pi*app_data['pivot_length']) if app_data['pivot_length'] else 0:.2f} м</span> </p>
+                <p>Время полного оборота: <span id='circle_time_display'>{((2*math.pi*app_data['pivot_length'])/(app_data['pivot_speed'] if app_data['pivot_speed'] else 1)/ (app_data['pivot_mode']/100 if app_data['pivot_mode'] else 1)) / (app_data['pivot_time_factor'] if app_data['pivot_time_factor'] else 1) if app_data['pivot_length'] else 0:.2f} мин</span></p>
             </div>
-            <div id=\"map_display_area\">{map_html_representation}</div>
+            <div id='map_display_area'>{map_html_representation}</div>
         </div>
         <script>
             // ... существующие функции ...
-            async function handleGlobalMapInteraction(latitude, longitude) {{
-                // Только для Center Pivot (loc1)
+            async function handleGlobalMapInteraction(latitude, longitude) {
                 const loc1IsSet_el = document.getElementById('loc1_coords_display');
                 const loc1IsSet = loc1IsSet_el && !loc1IsSet_el.innerText.includes('Not set');
-                if (loc1IsSet) {{
+                if (loc1IsSet) {
                     Swal.fire('Center Pivot already set', 'Use reset to change.', 'info');
                     return;
-                }}
-                let confirmQuestion = `Set Center Pivot: (${{latitude}}, ${{longitude}})?`;
-                const confirmation = await Swal.fire({{ title: 'Confirm Point', text: confirmQuestion, icon: 'question', showCancelButton: true, confirmButtonText: 'Yes', cancelButtonText: 'Cancel' }});
-                if (confirmation.isConfirmed) {{
+                }
+                let confirmQuestion = `Set Center Pivot: (${latitude}, ${longitude})?`;
+                const confirmation = await Swal.fire({ title: 'Confirm Point', text: confirmQuestion, icon: 'question', showCancelButton: true, confirmButtonText: 'Yes', cancelButtonText: 'Cancel' });
+                if (confirmation.isConfirmed) {
                     await processGlobalCoordinateSelection(latitude, longitude, 1);
-                }}
-            }}
+                }
+            }
 
-            async function processGlobalCoordinateSelection(lat, lon, locId) {{
-                try {{
-                    const response = await fetch('/set_coordinate', {{
+            async function processGlobalCoordinateSelection(lat, lon, locId) {
+                try {
+                    const response = await fetch('/set_coordinate', {
                         method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ lat: parseFloat(lat), lon: parseFloat(lon), location_id: locId }})
-                    }});
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ lat: parseFloat(lat), lon: parseFloat(lon), location_id: locId })
+                    });
                     const result = await response.json();
-                    if (result.success) {{
-                        Swal.fire({{ title: 'Point Set!', text: result.message, icon: 'success', timer: 1500, showConfirmButton: false }});
+                    if (result.success) {
+                        Swal.fire({ title: 'Point Set!', text: result.message, icon: 'success', timer: 1500, showConfirmButton: false });
                         window.location.reload(); 
-                    }} else {{ Swal.fire('Error Setting Point', result.message || 'Unknown error.', 'error'); }}
-                }} catch (err) {{
+                    } else { Swal.fire('Error Setting Point', result.message || 'Unknown error.', 'error'); }
+                } catch (err) {
                     console.error('Error in processGlobalCoordinateSelection:', err);
                     Swal.fire('Network Error', 'Failed to communicate: ' + err.toString(), 'error');
-                }}
-            }}
+                }
+            }
 
-            async function resetGlobalSelections() {{
-                const confirmation = await Swal.fire({{ title: 'Confirm Reset', text: "Are you sure you want to clear all selected locations and azimuth?", icon: 'warning', showCancelButton: true, confirmButtonText: 'Yes, Reset', cancelButtonText: 'Cancel'}});
-                if (confirmation.isConfirmed) {{
-                    try {{
-                        const response = await fetch('/reset', {{ method: 'POST' }});
+            async function resetGlobalSelections() {
+                const confirmation = await Swal.fire({ title: 'Confirm Reset', text: "Are you sure you want to clear all selected locations and azimuth?", icon: 'warning', showCancelButton: true, confirmButtonText: 'Yes, Reset', cancelButtonText: 'Cancel' });
+                if (confirmation.isConfirmed) {
+                    try {
+                        const response = await fetch('/reset', { method: 'POST' });
                         const result = await response.json();
-                        if (result.success) {{
+                        if (result.success) {
                             Swal.fire('Selections Reset', result.message, 'success');
                             window.location.reload();
-                        }} else {{ Swal.fire('Error Resetting', result.message || 'Unknown error.', 'error'); }}
-                    }} catch (err) {{
+                        } else { Swal.fire('Error Resetting', result.message || 'Unknown error.', 'error'); }
+                    } catch (err) {
                         console.error('Error in resetGlobalSelections:', err);
                         Swal.fire('Network Error', 'Failed to communicate for reset: ' + err.toString(), 'error');
-                    }}
-                }}
-            }}
+                    }
+                }
+            }
 
-            async function setCenterPivotManual(event) {{
+            async function setCenterPivotManual(event) {
                 event.preventDefault();
                 const lat = document.getElementById('manual_center_lat').value;
                 const lng = document.getElementById('manual_center_lng').value;
                 await processGlobalCoordinateSelection(lat, lng, 1);
                 window.location.reload();
                 return false;
-            }}
+            }
 
-            async function setPivotLength(event) {{
+            async function setPivotLength(event) {
                 event.preventDefault();
                 const length = document.getElementById('pivot_length_input').value;
-                try {{
-                    const response = await fetch('/set_pivot_length', {{
+                try {
+                    const response = await fetch('/set_pivot_length', {
                         method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ length: parseFloat(length) }})
-                    }});
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ length: parseFloat(length) })
+                    });
                     const result = await response.json();
-                    if (result.success) {{
-                        Swal.fire({{ title: 'Pivot Length Set!', text: result.message, icon: 'success', timer: 1200, showConfirmButton: false }});
+                    if (result.success) {
+                        Swal.fire({ title: 'Pivot Length Set!', text: result.message, icon: 'success', timer: 1200, showConfirmButton: false });
                         window.location.reload();
-                    }} else {{ Swal.fire('Error', result.message || 'Unknown error.', 'error'); }}
-                }} catch (err) {{
+                    } else { Swal.fire('Error', result.message || 'Unknown error.', 'error'); }
+                } catch (err) {
                     Swal.fire('Network Error', 'Failed to set length: ' + err.toString(), 'error');
-                }}
+                }
                 return false;
-            }}
+            }
 
             // --- Управление движением ---
-            async function setDirection(dir) {{
-                await fetch('/pivot_control', {{
+            async function setDirection(dir) {
+                await fetch('/pivot_control', {
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ action: 'direction', direction: dir }})
-                }});
-            }}
-            async function toggleStartStop() {{
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'direction', direction: dir })
+                });
+            }
+            async function toggleStartStop() {
                 const running = document.getElementById('start_stop_btn').innerText === 'Стоп';
-                await fetch('/pivot_control', {{
+                await fetch('/pivot_control', {
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ action: running ? 'stop' : 'start' }})
-                }});
-            }}
-            async function setSpeed() {{
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: running ? 'stop' : 'start' })
+                });
+            }
+            async function setSpeed() {
                 const speed = document.getElementById('speed_select').value;
-                await fetch('/pivot_control', {{
+                await fetch('/pivot_control', {
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ action: 'speed', speed: speed }})
-                }});
-            }}
-            async function setMode() {{
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'speed', speed: speed })
+                });
+            }
+            async function setMode() {
                 const mode = document.getElementById('mode_slider').value;
                 document.getElementById('mode_value').innerText = mode + '%';
-                await fetch('/pivot_control', {{
+                await fetch('/pivot_control', {
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ action: 'mode', mode: mode }})
-                }});
-            }}
-            async function setTimeFactor(factor) {{
-                await fetch('/pivot_control', {{
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'mode', mode: mode })
+                });
+            }
+            async function setTimeFactor(factor) {
+                await fetch('/pivot_control', {
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ action: 'time_factor', time_factor: factor }})
-                }});
-            }}
-            async function resetPivot() {{
-                await fetch('/pivot_control', {{
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'time_factor', time_factor: factor })
+                });
+            }
+            async function resetPivot() {
+                await fetch('/pivot_control', {
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ action: 'reset' }})
-                }});
-            }}
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'reset' })
+                });
+            }
 
             // --- Периодический опрос статуса и обновление UI ---
             let prevAngle = null;
-            async function pollPivotStatus() {{
-                try {{
+            async function pollPivotStatus() {
+                try {
                     const resp = await fetch('/pivot_status');
                     const data = await resp.json();
                     // Таймер
                     const t = data.timer;
                     document.getElementById('pivot_timer_display').innerText =
-                        `${{String(Math.floor(t/3600)).padStart(2,'0')}}:${{String(Math.floor((t/60)%60)).padStart(2,'0')}}`;
+                        `${String(Math.floor(t/3600)).padStart(2,'0')}:${String(Math.floor((t/60)%60)).padStart(2,'0')}`;
                     // Кнопка старт/стоп
                     document.getElementById('start_stop_btn').innerText = data.running ? 'Стоп' : 'Старт';
-                    // Обновление End Pivot
-                    if (data.end_pivot) {{
-                        document.getElementById('loc2_coords_display').innerText = `[${{data.end_pivot[0].toFixed(4)}}, ${{data.end_pivot[1].toFixed(4)}}]`;
-                    }}
-                    // Визуализация сектора
-                    if (window.updateSectorArc) {{
-                        window.updateSectorArc(data.angle);
-                    }}
-                }} catch (e) {{ /* ignore */ }}
+                    // Обновление End Pivot (dynamic)
+                    if (data.end_pivot) {
+                        document.getElementById('loc2_coords_display').innerText = `[${data.end_pivot[0].toFixed(4)}, ${data.end_pivot[1].toFixed(4)}]`;
+                    }
+                    // Обновление азимута
+                    if (data.azimuth !== undefined && data.azimuth !== null) {
+                        document.getElementById('azimuth_result_display').innerText = `${data.azimuth.toFixed(2)}°`;
+                    }
+                } catch (e) { /* ignore */ }
                 setTimeout(pollPivotStatus, 1000);
-            }}
+            }
             pollPivotStatus();
 
             // --- Визуализация сектора на карте (через Leaflet) ---
-            function addSectorArcToMap() {{
+            function addSectorArcToMap() {
                 const iframe = document.querySelector('#map_display_area iframe');
-                if (!iframe) {{ setTimeout(addSectorArcToMap, 1000); return; }}
+                if (!iframe) { setTimeout(addSectorArcToMap, 1000); return; }
                 const win = iframe.contentWindow;
-                if (!win.L) {{ setTimeout(addSectorArcToMap, 1000); return; }}
+                if (!win.L) { setTimeout(addSectorArcToMap, 1000); return; }
                 let map = null;
-                for (let k in win) {{
-                    if (win[k] && win[k].setView && win[k].on) {{ map = win[k]; break; }}
-                }}
-                if (!map) {{ setTimeout(addSectorArcToMap, 1000); return; }}
-                const loc1 = {{lat: parseFloat(document.getElementById('loc1_coords_display').innerText.replace(/[^\d.,-]/g,'').split(',')[0]), lng: parseFloat(document.getElementById('loc1_coords_display').innerText.replace(/[^\d.,-]/g,'').split(',')[1])}};
+                for (let k in win) {
+                    if (win[k] && win[k].setView && win[k].on) { map = win[k]; break; }
+                }
+                if (!map) { setTimeout(addSectorArcToMap, 1000); return; }
+                const loc1 = {lat: parseFloat(document.getElementById('loc1_coords_display').innerText.replace(/[^\d.,-]/g,'').split(',')[0]), lng: parseFloat(document.getElementById('loc1_coords_display').innerText.replace(/[^\d.,-]/g,'').split(',')[1])};
                 const radius = parseFloat(document.getElementById('pivot_length_input').value);
                 if (!loc1.lat || !loc1.lng || !radius) return;
-                let sectorLayer = null, baseCircle = null;
-                window.updateSectorArc = function(angle) {{
-                    if (sectorLayer) {{ map.removeLayer(sectorLayer); }}
-                    if (baseCircle) {{ map.removeLayer(baseCircle); }}
-                    // Основной круг (светлый)
-                    baseCircle = win.L.circle([loc1.lat, loc1.lng], {{radius: radius, color:'#2980b9', fillColor:'#f7b6d2', fillOpacity:0.3, weight:2}});
+                let baseCircle = null;
+                window.updateSectorArc = function(angle) {
+                    if (baseCircle) { map.removeLayer(baseCircle); }
+                    // Только основной круг, без сектора
+                    baseCircle = win.L.circle([loc1.lat, loc1.lng], {radius: radius, color:'#2980b9', fillColor:'#f7b6d2', fillOpacity:0.3, weight:2});
                     baseCircle.addTo(map);
-                    // Сектор (тёмный)
-                    const points = [];
-                    const steps = Math.max(2, Math.floor(Math.abs(angle)/2));
-                    let start = 0, end = angle;
-                    if (document.getElementById('dir_ccw_btn').classList.contains('active')) {{
-                        end = -angle;
-                    }}
-                    for (let a = start; Math.abs(a) <= Math.abs(end); a += (end-start)/steps) {{
-                        const theta = (a-90)*Math.PI/180;
-                        const lat = loc1.lat + (radius/111320)*Math.cos(theta);
-                        const lng = loc1.lng + (radius/111320)*Math.sin(theta)/Math.cos(loc1.lat*Math.PI/180);
-                        points.push([lat, lng]);
-                    }}
-                    points.unshift([loc1.lat, loc1.lng]);
-                    sectorLayer = win.L.polygon(points, {{color:'#e75480', fillColor:'#e75480', fillOpacity:0.3, weight:0}});
-                    sectorLayer.addTo(map);
-                }};
-            }}
+                };
+            }
             setTimeout(addSectorArcToMap, 2000);
 
-            function checkPivotBlocks() {{
+            function checkPivotBlocks() {
                 const loc1 = document.getElementById('loc1_coords_display').innerText;
                 const len = document.getElementById('pivot_length_input').value;
                 const show = loc1 && !loc1.includes('Not set') && len && parseFloat(len) > 0;
                 document.getElementById('pivot_control_block').style.display = show ? '' : 'none';
                 document.getElementById('pivot_calc_block').style.display = show ? '' : 'none';
                 document.getElementById('pivot_warning').style.display = show ? 'none' : '';
-            }}
+            }
             setTimeout(checkPivotBlocks, 1000);
         </script>
     </body>
     </html>
-    """
+    '''
     return render_template_string(html_content_page)
 
 @app.route('/set_coordinate', methods=['POST'])
@@ -512,8 +506,12 @@ def pivot_status():
         pivot_length = app_data['pivot_length']
         angle = app_data['pivot_angle']
         end_pivot = None
+        azimuth = None
         if loc1 and pivot_length:
             end_pivot = calculate_end_pivot_by_angle(loc1[0], loc1[1], float(pivot_length), angle)
+            # Азимут между loc1 и текущим End Pivot
+            azimuth = calculate_azimuth(loc1[0], loc1[1], end_pivot[0], end_pivot[1])
+            app_data['azimuth'] = azimuth
         return jsonify({
             "angle": angle,
             "timer": app_data['pivot_timer'],
@@ -523,6 +521,7 @@ def pivot_status():
             "mode": app_data['pivot_mode'],
             "time_factor": app_data['pivot_time_factor'],
             "end_pivot": end_pivot,
+            "azimuth": azimuth,
         })
 
 @app.route('/health')
