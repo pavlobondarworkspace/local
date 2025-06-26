@@ -241,6 +241,18 @@ def reset_endpoint():
     app_data["status_message"] = "IAApp(SwalFix): Reset. Select Loc 1."
     return jsonify({"success": True, "message": "IAApp(SwalFix): Selections cleared."})
 
+@app.route('/set_pivot_length', methods=['POST'])
+def set_pivot_length():
+    try:
+        payload = request.get_json()
+        length = payload.get('length')
+        if length is None or float(length) <= 0:
+            return jsonify({"success": False, "message": "Invalid length."}), 400
+        app_data["pivot_length"] = float(length)
+        return jsonify({"success": True, "message": f"Pivot Length set: {length} m."})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
+
 # Health check endpoint for monitoring
 @app.route('/health')
 def health_check():
