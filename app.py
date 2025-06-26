@@ -57,15 +57,14 @@ def get_circle_length():
     return 2 * math.pi * state["length"] if state["length"] else 0
 
 def get_circle_time():
-    if not state["length"] or not state["speed"] or not state["mode"]:
-        return 0
+    if not state["length"] or not state["speed"]:
+        return "00:00"
     length = get_circle_length()
     speed = state["speed"]
-    mode = state["mode"] / 100.0
-    tf = state["time_factor"]
-    if speed * mode * tf == 0:
-        return 0
-    return length / (speed * mode * tf) / 60  # в минутах
+    mins = length / speed / 60
+    h = int(mins // 1)
+    m = int((mins - h) * 60)
+    return f"{h:02d}:{m:02d}"
 
 @app.route("/")
 def index():

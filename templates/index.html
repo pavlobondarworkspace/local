@@ -60,6 +60,7 @@
     <div class="info" id="circletime"></div>
     <div class="info" id="status"></div>
     <div class="info" id="coords"></div>
+    <div class="info" id="endcoords"></div>
     <div class="info" id="azimuth"></div>
     <div class="info" id="timer"></div>
     <div class="warn" id="warn" style="display:none;">Set center and length to start simulation.</div>
@@ -121,20 +122,25 @@ function update() {
         center = data.center;
         length = data.length;
         document.getElementById('warn').style.display = (!center||!length) ? '' : 'none';
+        // Если нет центра или длины — удалить все объекты
+        if (!center || !length) {
+            [centerMarker, endMarker, zeroMarker, redLine, blueLine, circleObj] = [centerMarker, endMarker, zeroMarker, redLine, blueLine, circleObj].map(obj => { if(obj) { map.removeLayer(obj); } return null; });
+            return;
+        }
         // Круг
         if (circleObj) map.removeLayer(circleObj);
-        if (center && length) circleObj = L.circle(center, {radius:length, color:'#2980b9', fill:false, weight:2}).addTo(map);
+        circleObj = L.circle(center, {radius:length, color:'#2980b9', fill:false, weight:2}).addTo(map);
         // Маркеры
         if (center) {
             if (!centerMarker) centerMarker = L.marker(center, {icon:L.icon({iconUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/images/marker-icon.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map);
             centerMarker.setLatLng(center);
         }
         if (data.zero) {
-            if (!zeroMarker) zeroMarker = L.marker(data.zero, {icon:L.divIcon({className:'',html:'<div style=\"background:#2980b9;width:16px;height:16px;border-radius:8px;border:2px solid #fff;\"></div>',iconAnchor:[8,8]})}).addTo(map);
+            if (!zeroMarker) zeroMarker = L.marker(data.zero, {icon:L.divIcon({className:'',html:'<div style=\"background:#2980b9;width:8px;height:8px;border-radius:4px;border:2px solid #fff;\"></div>',iconAnchor:[4,4]})}).addTo(map);
             zeroMarker.setLatLng(data.zero);
         }
         if (data.end) {
-            if (!endMarker) endMarker = L.marker(data.end, {icon:L.divIcon({className:'',html:'<div style=\"background:#e74c3c;width:16px;height:16px;border-radius:8px;border:2px solid #fff;\"></div>',iconAnchor:[8,8]})}).addTo(map);
+            if (!endMarker) endMarker = L.marker(data.end, {icon:L.divIcon({className:'',html:'<div style=\"background:#e74c3c;width:8px;height:8px;border-radius:4px;border:2px solid #fff;\"></div>',iconAnchor:[4,4]})}).addTo(map);
             endMarker.setLatLng(data.end);
         }
         // Линии
@@ -144,6 +150,7 @@ function update() {
         if (center && data.zero) blueLine = L.polyline([center, data.zero], {color:'blue',weight:4}).addTo(map);
         // Info
         document.getElementById('coords').innerText = center ? `Center: [${center.map(x=>x.toFixed(4)).join(', ')}]` : 'Center: Not set';
+        document.getElementById('endcoords').innerText = data.end ? `End Pivot: [${data.end.map(x=>x.toFixed(4)).join(', ')}]` : 'End Pivot: Not set';
         document.getElementById('azimuth').innerText = data.azimuth!==null ? `Azimuth: ${data.azimuth.toFixed(2)}°` : 'Azimuth: Not calculated';
         document.getElementById('timer').innerText = `Timer: ${Math.floor(data.timer/3600).toString().padStart(2,'0')}:${Math.floor((data.timer/60)%60).toString().padStart(2,'0')}`;
         document.getElementById('status').innerText = data.running ? 'Simulation: Running' : 'Simulation: Stopped';
@@ -156,8 +163,7 @@ function update() {
             lengthInput.value = data.length || '';
         }
         document.getElementById('circlelen').innerText = data.circle_length ? `Circle length: ${data.circle_length.toFixed(2)} m` : '';
-        document.getElementById('circletime').innerText = data.circle_time ? `Full rotation time: ${data.circle_time.toFixed(2)} min` : '';
-        // Кнопка Start/Stop
+        document.getElementById('circletime').innerText = data.circle_time ? `Full rotation time: ${data.circle_time}` : '';
         let btn = document.getElementById('startStopBtn');
         btn.innerText = data.running ? 'Stop' : 'Start';
     });
