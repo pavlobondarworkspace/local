@@ -141,7 +141,10 @@ function update() {
         document.getElementById('modeval').innerText = data.mode+'%';
         document.getElementById('speed').value = data.speed;
         document.getElementById('tf').value = data.time_factor;
-        document.getElementById('length').value = data.length || '';
+        let lengthInput = document.getElementById('length');
+        if (document.activeElement !== lengthInput) {
+            lengthInput.value = data.length || '';
+        }
     });
 }
 setInterval(update, 1000);
