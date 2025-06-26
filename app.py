@@ -11,7 +11,8 @@ app.secret_key = os.environ.get('SECRET_KEY', 'interactive_app_secret_key_swal_f
 # In-memory storage
 app_data = {
     "loc1": None, "loc2": None, "azimuth": None,
-    "status_message": "IAApp(SwalFix): Click map for Location 1."
+    "status_message": "IAApp(SwalFix): Click map for Location 1.",
+    "pivot_length": None
 }
 
 def calculate_azimuth(lat1, lon1, lat2, lon2):
@@ -51,16 +52,17 @@ def index():
     if app_data["loc1"]:
         folium.Marker(location=app_data["loc1"], popup="Center Pivot", icon=folium.Icon(color='blue', icon='1', prefix='fa')).add_to(folium_map)
     # Если есть длина и Center Pivot, вычисляем End Pivot и рисуем всё
-    if app_data["loc1"] and app_data["pivot_length"]:
+    pivot_length = app_data.get("pivot_length")
+    if app_data["loc1"] and pivot_length is not None and float(pivot_length) > 0:
         # Вычисляем End Pivot по нулевому азимуту (или по углу, если есть)
         angle = app_data.get("pivot_angle", 0.0)
-        end_pivot = calculate_end_pivot_by_angle(app_data["loc1"][0], app_data["loc1"][1], app_data["pivot_length"], angle)
+        end_pivot = calculate_end_pivot_by_angle(app_data["loc1"][0], app_data["loc1"][1], float(pivot_length), angle)
         app_data["loc2"] = end_pivot
         folium.Marker(location=end_pivot, popup="End Pivot", icon=folium.Icon(color='red', icon='2', prefix='fa')).add_to(folium_map)
         folium.PolyLine([app_data["loc1"], end_pivot], color='blue', weight=4).add_to(folium_map)
         folium.Circle(
             location=app_data["loc1"],
-            radius=app_data["pivot_length"],
+            radius=float(pivot_length),
             color='#2980b9',
             fill=True,
             fill_color='#f7b6d2',
@@ -144,7 +146,7 @@ def index():
                     <button type="submit">Set Center Pivot (manual)</button>
                 </form>
                 <form id="pivot_length_form" style="display:inline-block; margin-left:10px;" onsubmit="return setPivotLength(event)">
-                    <input type="number" step="any" id="pivot_length_input" placeholder="Pivot Length (m)" min="1" required style="width:120px;" value="{app_data['pivot_length'] if 'pivot_length' in app_data and app_data['pivot_length'] else ''}">
+                    <input type="number" step="any" id="pivot_length_input" placeholder="Pivot Length (m)" min="1" required style="width:120px;" value="{app_data.get('pivot_length') if app_data.get('pivot_length') else ''}">
                     <button type="submit">Set Pivot Length</button>
                 </form>
                 <button class="reset-button" onclick="resetGlobalSelections()">Reset All Selections</button>
