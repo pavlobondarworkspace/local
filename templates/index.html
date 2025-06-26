@@ -54,7 +54,10 @@
             <option>1</option><option>2</option><option>10</option><option>100</option><option>1000</option>
         </select>
         <button onclick="resetPivot()">Reset Pivot</button>
+        <button id="startStopBtn" onclick="toggleStartStop()">Start</button>
     </div>
+    <div class="info" id="circlelen"></div>
+    <div class="info" id="circletime"></div>
     <div class="info" id="status"></div>
     <div class="info" id="coords"></div>
     <div class="info" id="azimuth"></div>
@@ -66,7 +69,7 @@
 let map = L.map('map').setView([20,0], 2);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18}).addTo(map);
 
-let centerMarker = null, endMarker = null, zeroMarker = null, redLine = null, blueLine = null;
+let centerMarker = null, endMarker = null, zeroMarker = null, redLine = null, blueLine = null, circleObj = null;
 let center = null, length = null;
 
 map.on('click', function(e) {
@@ -108,26 +111,33 @@ function resetPivot() {
 function resetAll() {
     fetch('/reset', {method:'POST'}).then(()=>update());
 }
+function toggleStartStop() {
+    let btn = document.getElementById('startStopBtn');
+    fetch(btn.innerText==='Start'?'/start':'/stop', {method:'POST'}).then(()=>update());
+}
 
 function update() {
     fetch('/status').then(r=>r.json()).then(data=>{
         center = data.center;
         length = data.length;
         document.getElementById('warn').style.display = (!center||!length) ? '' : 'none';
-        // Markers
+        // Круг
+        if (circleObj) map.removeLayer(circleObj);
+        if (center && length) circleObj = L.circle(center, {radius:length, color:'#2980b9', fill:false, weight:2}).addTo(map);
+        // Маркеры
         if (center) {
             if (!centerMarker) centerMarker = L.marker(center, {icon:L.icon({iconUrl:'https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/images/marker-icon.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map);
             centerMarker.setLatLng(center);
         }
         if (data.zero) {
-            if (!zeroMarker) zeroMarker = L.marker(data.zero, {icon:L.divIcon({className:'',html:'<div style=\"background:#2980b9;width:16px;height:16px;border-radius:8px;border:2px solid #fff;\"></div>'})}).addTo(map);
+            if (!zeroMarker) zeroMarker = L.marker(data.zero, {icon:L.divIcon({className:'',html:'<div style=\"background:#2980b9;width:16px;height:16px;border-radius:8px;border:2px solid #fff;\"></div>',iconAnchor:[8,8]})}).addTo(map);
             zeroMarker.setLatLng(data.zero);
         }
         if (data.end) {
-            if (!endMarker) endMarker = L.marker(data.end, {icon:L.divIcon({className:'',html:'<div style=\"background:#e74c3c;width:16px;height:16px;border-radius:8px;border:2px solid #fff;\"></div>'})}).addTo(map);
+            if (!endMarker) endMarker = L.marker(data.end, {icon:L.divIcon({className:'',html:'<div style=\"background:#e74c3c;width:16px;height:16px;border-radius:8px;border:2px solid #fff;\"></div>',iconAnchor:[8,8]})}).addTo(map);
             endMarker.setLatLng(data.end);
         }
-        // Lines
+        // Линии
         if (redLine) map.removeLayer(redLine);
         if (blueLine) map.removeLayer(blueLine);
         if (center && data.end) redLine = L.polyline([center, data.end], {color:'red',weight:4}).addTo(map);
@@ -145,9 +155,14 @@ function update() {
         if (document.activeElement !== lengthInput) {
             lengthInput.value = data.length || '';
         }
+        document.getElementById('circlelen').innerText = data.circle_length ? `Circle length: ${data.circle_length.toFixed(2)} m` : '';
+        document.getElementById('circletime').innerText = data.circle_time ? `Full rotation time: ${data.circle_time.toFixed(2)} min` : '';
+        // Кнопка Start/Stop
+        let btn = document.getElementById('startStopBtn');
+        btn.innerText = data.running ? 'Stop' : 'Start';
     });
 }
-setInterval(update, 1000);
+setInterval(update, 500);
 update();
 </script>
 </body>

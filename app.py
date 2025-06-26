@@ -43,7 +43,6 @@ def tick():
         state["last_tick"] = now
         if state["running"] and state["center"] and state["length"]:
             mode = state["mode"] / 100.0
-            # Duty cycle: 1 минута = mode*60 сек едет, остальное стоит
             cycle = 60.0
             t_in_cycle = (state["timer"] % cycle)
             move_time = cycle * mode
@@ -53,6 +52,20 @@ def tick():
                 d_angle = 360.0 * (state["speed"] * dt_move) / circle_length * state["direction"]
                 state["angle"] = (state["angle"] + d_angle) % 360.0
             state["timer"] += int(dt)
+
+def get_circle_length():
+    return 2 * math.pi * state["length"] if state["length"] else 0
+
+def get_circle_time():
+    if not state["length"] or not state["speed"] or not state["mode"]:
+        return 0
+    length = get_circle_length()
+    speed = state["speed"]
+    mode = state["mode"] / 100.0
+    tf = state["time_factor"]
+    if speed * mode * tf == 0:
+        return 0
+    return length / (speed * mode * tf) / 60  # в минутах
 
 @app.route("/")
 def index():
@@ -68,6 +81,8 @@ def status():
         end = calc_end_pivot(center, length, angle) if center and length else None
         zero = calc_end_pivot(center, length, 0) if center and length else None
         azimuth = calc_azimuth(center, end) if center and end else None
+        circle_length = get_circle_length()
+        circle_time = get_circle_time()
         return jsonify({
             "center": center,
             "length": length,
@@ -80,7 +95,9 @@ def status():
             "direction": state["direction"],
             "speed": state["speed"],
             "mode": state["mode"],
-            "time_factor": state["time_factor"]
+            "time_factor": state["time_factor"],
+            "circle_length": circle_length,
+            "circle_time": circle_time
         })
 
 @app.route("/set_center", methods=["POST"])
@@ -114,6 +131,18 @@ def control():
             state["angle"] = 0.0
             state["timer"] = 0
             state["running"] = False
+    return jsonify(success=True)
+
+@app.route("/start", methods=["POST"])
+def start():
+    with lock:
+        state["running"] = True
+    return jsonify(success=True)
+
+@app.route("/stop", methods=["POST"])
+def stop():
+    with lock:
+        state["running"] = False
     return jsonify(success=True)
 
 @app.route("/reset", methods=["POST"])
